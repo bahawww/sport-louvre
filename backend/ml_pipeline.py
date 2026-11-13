@@ -61,9 +61,15 @@ CLEAN_NUM_FEATURES: list[str] = [
     "pre_drawdown_pct",
     "pre_mom1",
     "pre_mom2",
+    "pre_mom3",
+    "pre_mom1_ann",
     "pre_multiplier",
     "is_pre_peak",
     "pre_slope",
+    "pre_cagr",
+    "pre_ratio_mean",
+    "pre_recent_dd",
+    "pre_span_yr",
 ]
 
 LEAKAGE_EXTRA_NUM_FEATURES: list[str] = [
@@ -174,7 +180,7 @@ def _evaluate_classifiers(
     specs = [
         ("Random Forest", RandomForestClassifier(n_estimators=400, random_state=42)),
         ("Gradient Boosting", GradientBoostingClassifier(n_estimators=200, max_depth=3, random_state=42)),
-        ("Logistic Regression", LogisticRegression(max_iter=2000, C=2.0, random_state=42)),
+        ("Logistic Regression", LogisticRegression(max_iter=3000, C=10.0, random_state=42)),
     ]
 
     models_out: list[dict[str, Any]] = []
@@ -294,12 +300,33 @@ def build_artifacts() -> DashboardArtifacts:
     lag_feats: dict[str, dict[str, float]] = {}
     for pid, grp in hist_sorted.groupby("player_id"):
         vals = grp["value_eur"].astype(float).values
+        dts = grp["_dt"].values
         pre = vals[:-1] if len(vals) > 1 else vals
+        pre_dt = dts[:-1] if len(dts) > 1 else dts
         p1 = float(pre[-1]) if len(pre) >= 1 else 0.0
         p2 = float(pre[-2]) if len(pre) >= 2 else p1
         p3 = float(pre[-3]) if len(pre) >= 3 else p2
+        p4 = float(pre[-4]) if len(pre) >= 4 else p3
         p_peak = float(np.max(pre)) if len(pre) else 0.0
         p_first = float(pre[0]) if len(pre) else 0.0
+        p_mean = float(np.mean(pre)) if len(pre) else 0.0
+        pre_span_yr = (
+            max(0.25, float((pre_dt[-1] - pre_dt[0]) / np.timedelta64(1, "D")) / 365.25)
+            if len(pre_dt) >= 2 and pd.notna(pre_dt[0]) and pd.notna(pre_dt[-1])
+            else 0.5
+        )
+        dt_gap_yr = (
+            max(0.15, float((pre_dt[-1] - pre_dt[-2]) / np.timedelta64(1, "D")) / 365.25)
+            if len(pre_dt) >= 2 and pd.notna(pre_dt[-2]) and pd.notna(pre_dt[-1])
+            else 0.5
+        )
+        pre_cagr = (
+            float(np.clip((p1 / max(p_first, 1.0)) ** (1.0 / pre_span_yr) - 1.0, -0.99, 10.0))
+            if p1 > 0 and p_first > 0
+            else 0.0
+        )
+        mom1 = (p1 - p2) / max(p2, 1.0)
+        recent_peak = float(np.max(pre[-3:])) if len(pre) >= 3 else p_peak
         slope = (
             float(np.polyfit(np.arange(len(pre), dtype=float), pre, 1)[0]) / max(p_peak, 1.0)
             if len(pre) >= 2
@@ -310,11 +337,17 @@ def build_artifacts() -> DashboardArtifacts:
             "pre_prev_value_eur": p2,
             "pre_peak_value_eur": p_peak,
             "pre_drawdown_pct": (p_peak - p1) / max(p_peak, 1.0),
-            "pre_mom1": (p1 - p2) / max(p2, 1.0),
+            "pre_mom1": mom1,
             "pre_mom2": (p1 - p3) / max(p3, 1.0),
+            "pre_mom3": (p1 - p4) / max(p4, 1.0),
+            "pre_mom1_ann": mom1 / dt_gap_yr,
             "pre_multiplier": p1 / max(p_first, 1.0),
             "is_pre_peak": float(int(p1 >= p_peak * 0.999)) if p_peak > 0 else 0.0,
             "pre_slope": slope,
+            "pre_cagr": pre_cagr,
+            "pre_ratio_mean": p1 / max(p_mean, 1.0),
+            "pre_recent_dd": (recent_peak - p1) / max(recent_peak, 1.0),
+            "pre_span_yr": pre_span_yr,
         }
 
     for col in [
@@ -324,9 +357,15 @@ def build_artifacts() -> DashboardArtifacts:
         "pre_drawdown_pct",
         "pre_mom1",
         "pre_mom2",
+        "pre_mom3",
+        "pre_mom1_ann",
         "pre_multiplier",
         "is_pre_peak",
         "pre_slope",
+        "pre_cagr",
+        "pre_ratio_mean",
+        "pre_recent_dd",
+        "pre_span_yr",
     ]:
         df[col] = df["player_id"].map(lambda pid, c=col: lag_feats.get(pid, {}).get(c, 0.0))
 

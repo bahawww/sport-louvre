@@ -162,6 +162,10 @@ def simulate(req: SimulateRequest) -> dict[str, Any]:
     is_pre_peak = 1 if pre_last >= pre_peak * 0.95 else 0
     pre_slope = (pre_last - float(req.first_value_eur)) / max(float(req.num_valuation_points), 2) / max(pre_peak, 1.0)
 
+    pre_span_yr = max(0.5, float(req.career_span_years) * 0.85)
+    pre_cagr = (pre_last / max(float(req.first_value_eur), 1.0)) ** (1.0 / pre_span_yr) - 1.0
+    pre_cagr = max(-0.99, min(10.0, pre_cagr))
+
     row_dict = {
         "age": float(req.age),
         "age_at_peak": float(req.age_at_peak),
@@ -183,9 +187,15 @@ def simulate(req: SimulateRequest) -> dict[str, Any]:
         "pre_drawdown_pct": pre_drawdown,
         "pre_mom1": pre_mom1,
         "pre_mom2": pre_mom2,
+        "pre_mom3": pre_mom2 * 1.1,
+        "pre_mom1_ann": pre_mom1 / 0.5,
         "pre_multiplier": pre_mult,
         "is_pre_peak": is_pre_peak,
         "pre_slope": pre_slope,
+        "pre_cagr": pre_cagr,
+        "pre_ratio_mean": pre_last / max((float(req.first_value_eur) + pre_last) * 0.5, 1.0),
+        "pre_recent_dd": pre_drawdown,
+        "pre_span_yr": pre_span_yr,
         "league_name": req.league_name.strip(),
         "nationality": nat_grouped,
     }
