@@ -6,7 +6,29 @@ import { EChart } from "@/components/chart";
 import { ClubBadge, LeagueBadge, PlayerAvatar } from "@/components/entity-media";
 import { TrajectoryBadge } from "@/components/trajectory-badge";
 import type { OverviewResponse, TestPredictionsResponse } from "@/lib/api";
-import { fmt, trajectoryLabel } from "@/lib/format";
+import { fmt, trajectoryLabel, TREND_META } from "@/lib/format";
+
+function TrendChip({
+  trend,
+  fallback,
+  wrong = false,
+}: {
+  trend?: string;
+  fallback: string;
+  wrong?: boolean;
+}) {
+  const meta = trend ? TREND_META[trend] : undefined;
+  if (!meta) return <TrajectoryBadge value={fallback} />;
+  return (
+    <span
+      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${meta.className} ${
+        wrong ? "ring-1 ring-[#EF4444]" : ""
+      }`}
+    >
+      {meta.label}
+    </span>
+  );
+}
 
 export function DiagnosticsPanel({
   overview,
@@ -37,18 +59,35 @@ export function DiagnosticsPanel({
   const oot = overview.out_of_time?.sets.unseen_players_future;
   const ootClf = oot?.classification[cleanBlock.best_model];
   const holdoutClf = cleanBlock.models.find((m) => m.name === cleanBlock.best_model);
+  const trendCv = overview.classification.trend?.validation.group_kfold;
+  const cvTrend = trendCv?.[cleanBlock.best_model];
+  const cvTrendBase = trendCv?.["Persistence (last state)"];
 
-  const clsModels =
-    mode === "clean"
+  const trend = overview.classification.trend;
+  const [view, setView] = useState<"trend" | "detail">(trend ? "trend" : "detail");
+  const showTrend = mode === "clean" && view === "trend" && !!trend;
+  const clsModels = showTrend
+    ? trend.models
+    : mode === "clean"
       ? overview.classification.clean_mode.models
       : overview.classification.leakage_mode.models;
   const activeCls = clsModels[modelIdx] ?? clsModels[0];
+  const classes: string[] = showTrend ? trend.classes : overview.classification.classes;
+  const classLabel = (c: string) => (showTrend ? (TREND_META[c]?.label ?? c) : trajectoryLabel(c));
+  const baselineCls = clsModels.find((m) => m.name.startsWith("Persistence"));
+  const PERSIST = "Persistence (last state)";
+  const ootTrend = (name: string) =>
+    (oot?.classification[name] as unknown as { trend?: Record<string, number> } | undefined)?.trend;
 
   const scatterOption = useMemo(() => {
     const rows = preds.rows;
     const predOf = (r: (typeof rows)[number]) =>
       valueModel === "forecast" ? (r.forecast_value_eur ?? r.pred_value_eur) : r.pred_value_eur;
     const maxVal = Math.max(...rows.map((r) => Math.max(r.actual_value_eur, predOf(r))), 100_000_000);
+    const minVal = Math.max(
+      10_000,
+      Math.min(...rows.map((r) => Math.min(r.actual_value_eur, predOf(r)))),
+    );
     return {
       backgroundColor: "transparent",
       tooltip: {
@@ -63,7 +102,8 @@ export function DiagnosticsPanel({
       },
       grid: { left: 64, right: 20, top: 20, bottom: 44 },
       xAxis: {
-        type: "value",
+        type: "log",
+        min: minVal,
         name: "Aktual (€)",
         nameLocation: "middle",
         nameGap: 28,
@@ -72,7 +112,8 @@ export function DiagnosticsPanel({
         splitLine: { lineStyle: { color: "#1E293B" } },
       },
       yAxis: {
-        type: "value",
+        type: "log",
+        min: minVal,
         name: "Prediksi (€)",
         nameTextStyle: { color: "#94A3B8", fontSize: 11 },
         axisLabel: { color: "#94A3B8", fontSize: 11, formatter: (v: number) => fmt.eurShort(v) },
@@ -85,7 +126,7 @@ export function DiagnosticsPanel({
           silent: true,
           lineStyle: { type: "dashed", color: "#475569", width: 1.5 },
           data: [
-            [0, 0],
+            [minVal, minVal],
             [maxVal, maxVal],
           ],
         },
@@ -94,9 +135,9 @@ export function DiagnosticsPanel({
           symbolSize: 9,
           itemStyle: {
             color: (p: { data: [number, number] }) =>
-              p.data[1] - p.data[0] > 3_000_000
+              p.data[1] > p.data[0] * 1.25
                 ? "#10B981"
-                : p.data[1] - p.data[0] < -3_000_000
+                : p.data[1] < p.data[0] * 0.8
                   ? "#EF4444"
                   : "#38BDF8",
           },
@@ -127,7 +168,10 @@ export function DiagnosticsPanel({
             <div>
               <h3 className="text-base font-bold text-[#F1F5F9]">Interactive Confusion Matrix</h3>
               <p className="text-xs text-[#94A3B8]">
-                Acc: {fmt.pct(activeCls.accuracy)} · F1: {fmt.pct(activeCls.f1_weighted)}
+                Akurasi: <strong className="text-[#10B981]">{fmt.pct(activeCls.accuracy)}</strong>
+                {baselineCls && mode === "clean"
+                  ? ` · baseline tanpa model: ${fmt.pct(baselineCls.accuracy)}`
+                  : ""}
                 {activeCls.macro_f1 !== undefined
                   ? ` · Macro-F1: ${fmt.pct(activeCls.macro_f1)}`
                   : ""}
@@ -135,6 +179,22 @@ export function DiagnosticsPanel({
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              {trend && mode === "clean" ? (
+                <div className="inline-flex rounded-lg border border-[#243244] bg-[#0B1117] p-0.5 text-xs">
+                  {(["trend", "detail"] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setView(v)}
+                      className={`rounded-md px-2.5 py-1 font-semibold ${
+                        view === v ? "bg-[#38BDF8] text-[#0B1117]" : "text-[#94A3B8]"
+                      }`}
+                    >
+                      {v === "trend" ? "4 Kelas" : "5 Kelas"}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <div className="inline-flex rounded-lg border border-[#243244] bg-[#0B1117] p-0.5 text-xs">
                 <button
                   type="button"
@@ -174,18 +234,18 @@ export function DiagnosticsPanel({
               <thead>
                 <tr className="text-[#94A3B8]">
                   <th className="p-2 text-left">Aktual \ Pred</th>
-                  {overview.classification.classes.map((c) => (
+                  {classes.map((c) => (
                     <th key={c} className="p-2 font-semibold">
-                      {trajectoryLabel(c)}
+                      {classLabel(c)}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {activeCls.confusion_matrix.map((row, ri) => (
-                  <tr key={overview.classification.classes[ri]} className="border-t border-[#1E293B]">
+                  <tr key={classes[ri]} className="border-t border-[#1E293B]">
                     <th className="p-2 text-left font-semibold text-[#F1F5F9]">
-                      {trajectoryLabel(overview.classification.classes[ri])}
+                      {classLabel(classes[ri])}
                     </th>
                     {row.map((val, ci) => {
                       const diag = ri === ci;
@@ -236,7 +296,11 @@ export function DiagnosticsPanel({
             {activeReg
               ? ` R² ${activeReg.r2.toFixed(3)} · R² log ${activeReg.r2_log?.toFixed(3) ?? "-"} · MAE ${fmt.eur(activeReg.mae)}.`
               : ""}{" "}
-            Hijau = prediksi &gt; aktual +€3M, merah = &lt; −€3M.
+            {valueModel === "forecast" && tasks?.forecast.headline
+              ? `Baseline naif (harga terakhir): R² log ${tasks.forecast.headline.naive_last_value.r2_log.toFixed(3)}. `
+              : ""}
+            Skala log. Hijau = prediksi lebih dari 25% di atas aktual, merah = lebih dari 20% di
+            bawah.
           </p>
           <div className="mt-3">
             <EChart option={scatterOption} height={300} label="Scatter plot aktual vs prediksi" />
@@ -256,10 +320,10 @@ export function DiagnosticsPanel({
               <thead className="border-b border-[#243244] text-[#94A3B8]">
                 <tr>
                   <th className="py-2 pr-3">Skema</th>
-                  <th className="py-2 px-3 text-right">Akurasi</th>
+                  <th className="py-2 px-3 text-right">Akurasi Tren (4 kelas)</th>
+                  <th className="py-2 px-3 text-right">Baseline tanpa model</th>
                   <th className="py-2 px-3 text-right">Macro-F1</th>
-                  <th className="py-2 px-3 text-right">ECE</th>
-                  <th className="py-2 px-3 text-right">Brier</th>
+                  <th className="py-2 px-3 text-right">Rincian 5 kelas</th>
                   <th className="py-2 px-3 text-right">Forecast R² log</th>
                   <th className="py-2 pl-3 text-right">Fundamental R² log</th>
                 </tr>
@@ -267,10 +331,18 @@ export function DiagnosticsPanel({
               <tbody className="divide-y divide-[#1E293B] text-[#F1F5F9]">
                 <tr>
                   <td className="py-2 pr-3 font-semibold">Holdout 80:20 per pemain</td>
-                  <td className="py-2 px-3 text-right">{fmt.pct(holdoutClf.accuracy)}</td>
-                  <td className="py-2 px-3 text-right">{fmt.pct(holdoutClf.macro_f1 ?? 0)}</td>
-                  <td className="py-2 px-3 text-right">{holdoutClf.ece?.toFixed(3)}</td>
-                  <td className="py-2 px-3 text-right">{holdoutClf.brier?.toFixed(3)}</td>
+                  <td className="py-2 px-3 text-right font-bold text-[#10B981]">
+                    {trend ? fmt.pct(trend.headline.metrics.accuracy) : "-"}
+                  </td>
+                  <td className="py-2 px-3 text-right text-[#94A3B8]">
+                    {trend ? fmt.pct(trend.headline.persistence.accuracy) : "-"}
+                  </td>
+                  <td className="py-2 px-3 text-right">
+                    {trend ? fmt.pct(trend.headline.metrics.macro_f1) : "-"}
+                  </td>
+                  <td className="py-2 px-3 text-right text-[#94A3B8]">
+                    {fmt.pct(holdoutClf.accuracy)}
+                  </td>
                   <td className="py-2 px-3 text-right">
                     {tasks.forecast.models.find((m) => m.name === tasks.forecast.best_model)?.r2_log?.toFixed(3)}
                   </td>
@@ -281,12 +353,20 @@ export function DiagnosticsPanel({
                 {cvClf ? (
                   <tr>
                     <td className="py-2 pr-3 font-semibold">GroupKFold 5-fold (rata-rata)</td>
-                    <td className="py-2 px-3 text-right">
-                      {fmt.pct(cvClf.accuracy_mean)} ± {(cvClf.accuracy_std * 100).toFixed(1)}
+                    <td className="py-2 px-3 text-right font-bold text-[#10B981]">
+                      {cvTrend
+                        ? `${fmt.pct(cvTrend.accuracy_mean)} ± ${(cvTrend.accuracy_std * 100).toFixed(1)}`
+                        : "-"}
                     </td>
-                    <td className="py-2 px-3 text-right">{fmt.pct(cvClf.macro_f1_mean)}</td>
-                    <td className="py-2 px-3 text-right">{cvClf.ece_mean.toFixed(3)}</td>
-                    <td className="py-2 px-3 text-right">{cvClf.brier_mean.toFixed(3)}</td>
+                    <td className="py-2 px-3 text-right text-[#94A3B8]">
+                      {cvTrendBase ? fmt.pct(cvTrendBase.accuracy_mean) : "-"}
+                    </td>
+                    <td className="py-2 px-3 text-right">
+                      {cvTrend ? fmt.pct(cvTrend.macro_f1_mean) : "-"}
+                    </td>
+                    <td className="py-2 px-3 text-right text-[#94A3B8]">
+                      {fmt.pct(cvClf.accuracy_mean)}
+                    </td>
                     <td className="py-2 px-3 text-right">
                       {tasks.forecast.validation.group_kfold[tasks.forecast.best_model]?.r2_log_mean.toFixed(3)}
                     </td>
@@ -298,10 +378,22 @@ export function DiagnosticsPanel({
                 {oot && ootClf ? (
                   <tr>
                     <td className="py-2 pr-3 font-semibold">Out-of-time ({oot.rows} update)</td>
-                    <td className="py-2 px-3 text-right">{fmt.pct(ootClf.accuracy)}</td>
-                    <td className="py-2 px-3 text-right">{fmt.pct(ootClf.macro_f1)}</td>
-                    <td className="py-2 px-3 text-right">{ootClf.ece.toFixed(3)}</td>
-                    <td className="py-2 px-3 text-right">{ootClf.brier.toFixed(3)}</td>
+                    <td className="py-2 px-3 text-right font-bold text-[#10B981]">
+                      {ootTrend(cleanBlock.best_model)
+                        ? fmt.pct(ootTrend(cleanBlock.best_model)!.accuracy)
+                        : "-"}
+                    </td>
+                    <td className="py-2 px-3 text-right text-[#94A3B8]">
+                      {ootTrend(PERSIST) ? fmt.pct(ootTrend(PERSIST)!.accuracy) : "-"}
+                    </td>
+                    <td className="py-2 px-3 text-right">
+                      {ootTrend(cleanBlock.best_model)
+                        ? fmt.pct(ootTrend(cleanBlock.best_model)!.macro_f1)
+                        : "-"}
+                    </td>
+                    <td className="py-2 px-3 text-right text-[#94A3B8]">
+                      {fmt.pct(ootClf.accuracy)}
+                    </td>
                     <td className="py-2 px-3 text-right">
                       {oot.regression.forecast[tasks.forecast.best_model]?.r2_log.toFixed(3)}
                     </td>
@@ -353,8 +445,8 @@ export function DiagnosticsPanel({
               <tr>
                 <th className="py-2 pr-3">Pemain</th>
                 <th className="py-2 px-3">Liga</th>
-                <th className="py-2 px-3">Aktual</th>
-                <th className="py-2 px-3">Pred Clean</th>
+                <th className="py-2 px-3">Tren Aktual</th>
+                <th className="py-2 px-3">Tren Prediksi</th>
                 <th className="py-2 px-3 text-right">Nilai Aktual</th>
                 <th className="py-2 px-3 text-right">Forecast</th>
                 <th className="py-2 px-3 text-right">Nilai Wajar</th>
@@ -380,10 +472,14 @@ export function DiagnosticsPanel({
                     <LeagueBadge league={r.league_name} size={14} />
                   </td>
                   <td className="py-2 px-3">
-                    <TrajectoryBadge value={r.actual_trajectory} />
+                    <TrendChip trend={r.actual_trend} fallback={r.actual_trajectory} />
                   </td>
                   <td className="py-2 px-3">
-                    <TrajectoryBadge value={r.pred_trajectory_clean} />
+                    <TrendChip
+                      trend={r.pred_trend}
+                      fallback={r.pred_trajectory_clean}
+                      wrong={!!r.pred_trend && r.pred_trend !== r.actual_trend}
+                    />
                   </td>
                   <td className="py-2 px-3 text-right font-semibold text-[#F1F5F9]">
                     {fmt.eur(r.actual_value_eur)}

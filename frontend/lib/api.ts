@@ -55,6 +55,13 @@ export interface RegressionTask {
   validation: { group_kfold: Record<string, Record<string, number>> };
   intervals: { method: string; holdout: IntervalReport; q_hat_log: number; n_calibration: number };
   tautology_probe?: { question: string; r2_log: number; medape: number };
+  headline?: {
+    model: string;
+    metrics: Record<string, number>;
+    naive_last_value: Record<string, number>;
+    beats_naive_eur: boolean;
+    beats_naive_log: boolean;
+  };
   reference_naive_last_value?: Record<string, number>;
 }
 
@@ -79,6 +86,10 @@ export interface TrendView {
   })[];
   best_model: string;
   headline: ClassifierHeadline;
+  validation: {
+    group_kfold: Record<string, Record<string, number>>;
+    fixed_horizon: Record<string, Record<string, number>>;
+  };
 }
 
 export interface OverviewResponse {
@@ -157,6 +168,9 @@ export interface TestPredictionRow {
   forecast_range_eur?: [number, number];
   forecast_residual_eur?: number;
   pred_trajectory_confidence?: number;
+  actual_trend?: string;
+  pred_trend?: string;
+  pred_trend_confidence?: number;
 }
 
 export type ScreeningRow = Omit<
