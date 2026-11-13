@@ -57,7 +57,7 @@ export function PlayerAvatar({
   return (
     <span
       style={{ width: size, height: size }}
-      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#243244] bg-[#182230] text-[10px] font-bold text-[#94A3B8] ${className}`}
+      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-b from-[#243244] via-[#182230] to-[#0B1117] text-[10px] font-bold text-[#94A3B8] ring-1 ring-white/15 shadow-sm ${className}`}
     >
       {src && !failed ? (
         <img
@@ -65,7 +65,7 @@ export function PlayerAvatar({
           alt={name}
           loading="lazy"
           onError={() => setFailed(true)}
-          className="h-full w-full object-cover object-top"
+          className="h-full w-full object-cover object-top drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]"
         />
       ) : (
         <span>{getInitials(name)}</span>
@@ -98,18 +98,14 @@ export function ClubBadge({
   return (
     <span className={`inline-flex items-center gap-1.5 ${className}`}>
       {src && !failed ? (
-        <span
+        <img
+          src={src}
+          alt={resolvedClub}
+          loading="lazy"
           style={{ width: size + 2, height: size + 2 }}
-          className="inline-flex shrink-0 items-center justify-center rounded bg-white/95 p-[1.5px]"
-        >
-          <img
-            src={src}
-            alt={resolvedClub}
-            loading="lazy"
-            onError={() => setFailed(true)}
-            className="h-full w-full object-contain"
-          />
-        </span>
+          onError={() => setFailed(true)}
+          className="shrink-0 object-contain drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]"
+        />
       ) : (
         <Shield style={{ width: size, height: size }} className="shrink-0 text-[#64748B]" />
       )}
@@ -138,18 +134,14 @@ export function LeagueBadge({
   return (
     <span className={`inline-flex items-center gap-1.5 ${className}`}>
       {src && !failed ? (
-        <span
-          style={{ width: size + 4, height: size + 4 }}
-          className="inline-flex shrink-0 items-center justify-center rounded bg-white/95 p-[2px]"
-        >
-          <img
-            src={src}
-            alt={league}
-            loading="lazy"
-            onError={() => setFailed(true)}
-            className="h-full w-full object-contain"
-          />
-        </span>
+        <img
+          src={src}
+          alt={league}
+          loading="lazy"
+          style={{ width: size + 3, height: size + 3 }}
+          onError={() => setFailed(true)}
+          className="shrink-0 object-contain drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]"
+        />
       ) : null}
       {showName ? <span className="truncate">{league}</span> : null}
     </span>
