@@ -7,6 +7,7 @@ import { ArenaPanel } from "@/components/panels/ArenaPanel";
 import { DatasetPanel } from "@/components/panels/DatasetPanel";
 import { DiagnosticsPanel } from "@/components/panels/DiagnosticsPanel";
 import { ErrorAnalysisPanel } from "@/components/panels/ErrorAnalysisPanel";
+import { PenjelasanPanel } from "@/components/panels/PenjelasanPanel";
 import { RecommendationsPanel } from "@/components/panels/RecommendationsPanel";
 import { ScoutingSimulatorPanel } from "@/components/panels/ScoutingSimulatorPanel";
 import { TrajectoryExplorerPanel } from "@/components/panels/TrajectoryExplorerPanel";
@@ -20,6 +21,7 @@ const TABS = [
   { id: "simulator", label: "Scouting Simulator" },
   { id: "recommendations", label: "Rekomendasi Klub" },
   { id: "datasets", label: "Dataset Total" },
+  { id: "penjelasan", label: "Penjelasan & Workflow" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -85,6 +87,7 @@ export default function DashboardPage() {
             {tab === "simulator" && <ScoutingSimulatorPanel />}
             {tab === "recommendations" && <RecommendationsPanel preds={preds.data} />}
             {tab === "datasets" && <DatasetPanel />}
+            {tab === "penjelasan" && <PenjelasanPanel overview={overview.data} />}
           </>
         )}
       </main>
