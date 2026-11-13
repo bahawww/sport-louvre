@@ -1,0 +1,55 @@
+name: sport-dashboard
+
+services:
+  api:
+    build:
+      context: ./backend
+    # Build via deploy/build.sh (--network host) on this VPS because bridge BuildKit is slow.
+    image: sport-dashboard-api:latest
+    restart: unless-stopped
+    volumes:
+      - ./data/Football_Player_Market_Value_Trajectories:/app/data:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  web:
+    build:
+      context: ./frontend
+    image: sport-dashboard-web:latest
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      # Localhost only: public traffic enters via cloudflared (VPS behind NAT).
+      - "127.0.0.1:8310:8310"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8310/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  caddy_data:
