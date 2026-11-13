@@ -78,6 +78,15 @@ Targets 2 and 4 updates ahead were tested and rejected: next-update log-RMSE got
 
 All use `HistGradientBoostingRegressor` on `log1p(value)` relative to a per-row anchor.
 
+### 12-month outlook (recommendations)
+Buy / avoid lists come from a separate task: for every past history prefix, the value at the
+first valuation 300-480 days later. A calibrated 3-class model gives P(down / flat / up) for a
+move beyond 5%, a regressor and CQR give the expected value and range. A player is a buy only
+when P(up) >= 0.70. The fundamental gap is **not** used for recommendations: players whose
+price fell over 40% in a year went on to rise in only 22% of cases, so "fell, therefore cheap"
+points the wrong way. Out-of-time (cutoff 2024-06-01) 81% of buy signals rose and 82% of
+depreciation-risk signals fell (base rates 48% / 42%).
+
 ### Classification
 Ordinal (Frank & Hall) decomposition of the five ordered classes over HistGradientBoosting, each
 cumulative model calibrated isotonic out-of-fold with folds grouped by player. Compared with

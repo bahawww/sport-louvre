@@ -105,4 +105,17 @@ Status counts: {'Undervalued': 254, 'Fair': 2128, 'Overvalued': 36}. Basis: {'ok
 
 Correlation between the log gap (fair/market) and the price return of the hidden 12 months: **-0.70**. The screen is to a large extent a 12-month reversal rank: it lists players whose price moved more than their year-old profile and age explain. Players at a new all-time high inside that window are labelled `breakout` and not flagged.
 
-Training time: 354.5 s. Panel rows used for training: 21700.
+## 8. 12-month outlook (drives the Recommendations panel)
+
+Out-of-time: fit on targets before 2024-06-01 (20097 rows), scored on 2203 later prefixes of 1685 players. Rank correlation predicted vs realised return 0.62; 80% interval coverage 76.1%.
+
+| Group (value ≥ €3M) | n | Went up >5% | Went down >5% | Median log return |
+|---|---|---|---|---|
+| All players (base rate) | 1527 | 48.0% | 41.7% | |
+| Signal Buy (P up ≥ 0.7) | 112 | 81.2% | 10.7% | +0.77 |
+| Signal Depreciation risk (P down ≥ 0.7) | 194 | 9.3% | 82.0% | -0.33 |
+| Old screen logic: price fell >40% in prior 12 months | 212 | 21.7% | 64.6% | -0.22 |
+
+Current signals: {'Buy': 77, 'Neutral': 1988, 'DepreciationRisk': 353}.
+
+Training time: 389.2 s. Panel rows used for training: 21700.

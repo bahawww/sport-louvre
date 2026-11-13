@@ -270,6 +270,8 @@ def _simulate_player(art: DashboardArtifacts, req: SimulateRequest) -> dict[str,
         }
     )
     out.update(_gap(out["fair_value_eur"], meta["last_value_eur"], out["fair_value_range_eur"], row))
+    if not sc.backtest and not appended and not league:
+        out["outlook_12m"] = art.extra["outlook_by_player"].get(pid)
     if not sc.backtest and (appended or league or sc.horizon_years is not None):
         base_row, _ = player_feature_row(art, pid)
         base = predict_feature_row(art, base_row)

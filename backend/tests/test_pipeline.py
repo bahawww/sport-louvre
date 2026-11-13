@@ -439,3 +439,50 @@ def test_simulate_player_whatif_scenarios(client, art):
 
     moved = client.post("/api/simulate", json={"player_id": pid, "scenario": {"league_name": "Ligue 1"}}).json()
     assert moved["features"]["league_name"] == "Ligue 1"
+
+
+# ----------------------------------------------------------------------------- 12-month outlook
+
+
+def test_outlook_targets_lie_10_to_16_months_after_the_prefix(art):
+    df, _, series, _ = mp.load_data()
+    history, current = mp.build_outlook_panel(df.head(150), series)
+    gap = (pd.to_datetime(history["target_date"]) - pd.to_datetime(history["date"])).dt.days
+    assert gap.min() >= mp.OUTLOOK_MIN_DAYS and gap.max() <= mp.OUTLOOK_MAX_DAYS
+    assert len(current) == 150 and "target_value" not in current.columns
+    assert (current["horizon_yr"] == 1.0).all()
+    # Scored rows describe the full history: last known value is the current market value.
+    last = current.set_index("player_id")["last_value_eur"]
+    for pid in last.index[:20]:
+        assert last[pid] == series[pid].values[-1]
+
+
+def test_outlook_payload_and_signal_rule(client):
+    o = client.get("/api/test-predictions").json()["outlook"]
+    assert o["horizon_months"] == 12 and o["threshold"] == 0.7
+    assert sum(o["signal_counts"].values()) == 2418
+    assert o["buy"] and o["depreciation_risk"]
+    for r in o["buy"]:
+        assert r["p_up"] >= 0.7 and r["current_value_eur"] >= o["min_value_eur"]
+        assert r["expected_range_eur"][0] <= r["expected_value_eur"] <= r["expected_range_eur"][1]
+    for r in o["depreciation_risk"]:
+        assert r["p_down"] >= 0.7 and r["expected_change_eur"] < 0
+
+
+def test_outlook_signals_hold_up_out_of_time(art):
+    v = art.test_predictions["outlook"]["validation"]
+    assert v["buy"]["n"] >= 50 and v["depreciation_risk"]["n"] >= 50
+    assert v["buy"]["went_up"] >= 0.75 and v["buy"]["went_up"] > v["base_rate"]["up"] + 0.2
+    assert v["depreciation_risk"]["went_down"] >= 0.75
+    assert v["rank_correlation"] > 0.5
+
+
+def test_collapsed_prices_are_not_buy_recommendations(art):
+    """Regression for the old 'price fell, so it is cheap' screen (Ansu Fati, Raheem Sterling)."""
+    v = art.test_predictions["outlook"]["validation"]["fell_over_40pct_prior_12m"]
+    assert v["went_down"] > v["went_up"]  # the evidence: collapsed prices mostly keep falling
+    by_name = {r["name"]: r for r in art.extra["outlook_by_player"].values()}
+    for name in ("Ansu Fati", "Raheem Sterling"):
+        assert by_name[name]["signal"] != "Buy", by_name[name]
+    buys = {r["name"] for r in art.test_predictions["outlook"]["buy"]}
+    assert not buys & {"Ansu Fati", "Raheem Sterling"}

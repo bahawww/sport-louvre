@@ -140,6 +140,21 @@ def main() -> None:
       f"**{sc['gap_vs_hidden_window_return_corr']:.2f}**. The screen is to a large extent a 12-month reversal rank: "
       "it lists players whose price moved more than their year-old profile and age explain. "
       "Players at a new all-time high inside that window are labelled `breakout` and not flagged.")
+    ol = art.test_predictions["outlook"]
+    v = ol["validation"]
+    w("\n## 8. 12-month outlook (drives the Recommendations panel)\n")
+    w(f"Out-of-time: fit on targets before {v['cutoff']} ({v['train_rows']} rows), scored on {v['test_rows']} later "
+      f"prefixes of {v['test_players']} players. Rank correlation predicted vs realised return {v['rank_correlation']:.2f}; "
+      f"80% interval coverage {v['interval_coverage']:.1%}.\n")
+    w("| Group (value ≥ €3M) | n | Went up >5% | Went down >5% | Median log return |")
+    w("|---|---|---|---|---|")
+    w(f"| All players (base rate) | {v['base_rate']['n']} | {v['base_rate']['up']:.1%} | {v['base_rate']['down']:.1%} | |")
+    w(f"| Signal Buy (P up ≥ {ol['threshold']}) | {v['buy']['n']} | {v['buy']['went_up']:.1%} | {v['buy']['went_down']:.1%} | {v['buy']['median_log_return']:+.2f} |")
+    d = v["depreciation_risk"]
+    w(f"| Signal Depreciation risk (P down ≥ {ol['threshold']}) | {d['n']} | {d['went_up']:.1%} | {d['went_down']:.1%} | {d['median_log_return']:+.2f} |")
+    f = v["fell_over_40pct_prior_12m"]
+    w(f"| Old screen logic: price fell >40% in prior 12 months | {f['n']} | {f['went_up']:.1%} | {f['went_down']:.1%} | {f['median_log_return']:+.2f} |")
+    w(f"\nCurrent signals: {ol['signal_counts']}.")
     w(f"\nTraining time: {o['methodology']['training_seconds']} s. Panel rows used for training: {o['dataset']['train_rows']}.")
     print("\n".join(out))
 

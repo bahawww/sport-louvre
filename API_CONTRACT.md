@@ -40,6 +40,13 @@ every field that existed before is still present with the same type.
 - **new** `screening_all`: out-of-fold fair value for all 2,418 players:
   `{ method, players, metrics, band_coverage, gap_vs_hidden_window_return_corr, status_counts, basis_counts, undervalued[25], overvalued[25] }`
   (point estimate and band are both out-of-fold)
+- **new** `outlook`: 12-month value outlook for all players; this drives the Recommendations panel.
+  `{ method, horizon_months, threshold, min_value_eur, interval_level, validation, signal_counts, buy[30], depreciation_risk[30], limits[] }`
+  - row: `player_id, name, age, nationality, league_name, position, peak_club, actual_trajectory, current_value_eur, valuation_date, expected_value_eur, expected_range_eur, expected_change_eur, expected_change_pct, p_up, p_down, signal`
+  - `signal`: `Buy` when `p_up >= threshold`, `DepreciationRisk` when `p_down >= threshold`, else `Neutral`
+    (always `Neutral` below `min_value_eur`). `p_up` / `p_down` = calibrated probability of a move beyond ±5%.
+  - `validation`: out-of-time hit rates of both signals, base rates, and the same numbers for
+    players whose price fell > 40% in the prior 12 months.
 - `error_analysis`: `{ leakage_delta_acc, growing_vs_stable_confusion_count, top_underpredicted_superstars[], league_bias[] }`
   (`league_bias` and superstars use the forecast residual; **new** `league_bias_model`).
 
@@ -83,5 +90,6 @@ Legacy body, still valid:
 - **new**: `mode` (`player_whatif|player_backtest|synthetic_profile`), `interval_level`, `models`, `warnings[]`
 - **new**, player modes only: `fair_value_eur, fair_value_range_eur, market_value_eur, valuation_gap_eur, valuation_gap_pct, valuation_status, valuation_basis, horizon_years, player{...}, features{...}`,
   and when a scenario is applied `baseline{...}` + `scenario_delta_eur`.
+  Without scenario changes the response also carries `outlook_12m` (the player's outlook row).
 
 Errors: `404` unknown `player_id`; `422` missing profile fields, unknown league, or invalid scenario.

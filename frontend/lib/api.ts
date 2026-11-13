@@ -142,10 +142,62 @@ export type ScreeningRow = Omit<
 > &
   Partial<Pick<TestPredictionRow, "actual_trajectory">>;
 
+export interface OutlookRow {
+  player_id: string;
+  name: string;
+  age: number;
+  nationality: string;
+  league_name: string;
+  position: string;
+  peak_club: string;
+  actual_trajectory: TrajectoryClass;
+  current_value_eur: number;
+  valuation_date: string;
+  expected_value_eur: number;
+  expected_range_eur: [number, number];
+  expected_change_eur: number;
+  expected_change_pct: number;
+  p_up: number;
+  p_down: number;
+  signal: "Buy" | "Neutral" | "DepreciationRisk";
+}
+
+export interface OutlookGroupCheck {
+  n: number;
+  went_up: number | null;
+  went_down: number | null;
+  median_log_return: number | null;
+}
+
+export interface OutlookResponse {
+  method: string;
+  horizon_months: number;
+  threshold: number;
+  min_value_eur: number;
+  interval_level: number;
+  validation: {
+    cutoff: string;
+    train_rows: number;
+    test_rows: number;
+    test_players: number;
+    rank_correlation: number;
+    interval_coverage: number;
+    base_rate: { up: number; down: number; n: number };
+    buy: OutlookGroupCheck;
+    depreciation_risk: OutlookGroupCheck;
+    fell_over_40pct_prior_12m: OutlookGroupCheck;
+  };
+  signal_counts: Record<string, number>;
+  buy: OutlookRow[];
+  depreciation_risk: OutlookRow[];
+  limits: string[];
+}
+
 export interface TestPredictionsResponse {
   rows: TestPredictionRow[];
   undervalued: TestPredictionRow[];
   overvalued: TestPredictionRow[];
+  outlook?: OutlookResponse;
   screening_all?: {
     method: string;
     players: number;
@@ -239,6 +291,7 @@ export interface SimulateResponse extends SimulatePrediction {
   valuation_gap_pct?: number;
   valuation_status?: "Undervalued" | "Fair" | "Overvalued";
   valuation_basis?: "ok" | "breakout" | "short_history";
+  outlook_12m?: OutlookRow | null;
   baseline?: SimulatePrediction & { horizon_years: number };
   scenario_delta_eur?: number;
   player?: {

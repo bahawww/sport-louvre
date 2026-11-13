@@ -84,6 +84,14 @@ CAL_START = "2024-01-01"  # conformal calibration rows: calibration players, tar
 INTERVAL_LEVEL = 0.80
 MAX_HORIZON_YR = 1.5  # 99% of training gaps between updates are below ~1.0 year
 HORIZON_WARN_YR = 1.0
+# 12-month outlook (buy / depreciation-risk lists)
+OUTLOOK_MIN_DAYS, OUTLOOK_MAX_DAYS = 300, 480  # target = first valuation in this window
+OUTLOOK_START = "2019-01-01"  # training rows need a prefix date on/after this
+OUTLOOK_OOT_CUTOFF = "2024-06-01"
+OUTLOOK_MOVE = 0.05  # |log return| above this counts as up / down
+OUTLOOK_THRESHOLD = 0.70  # calibrated probability needed for a signal
+OUTLOOK_MIN_VALUE = 3_000_000
+OUTLOOK_CLASSES = ["down", "flat", "up"]
 N_SPLITS = 5  # GroupKFold folds for model selection and out-of-fold screening
 N_CAL_SPLITS = 3  # grouped folds used to calibrate classifier probabilities
 SEED = 42
@@ -222,6 +230,148 @@ def build_panel(
     for cat in CAT_FEATURES:
         panel[cat] = panel[cat].astype(object).where(panel[cat].notna(), np.nan)
     return panel
+
+
+def build_outlook_panel(
+    df: pd.DataFrame, series: dict[str, PlayerSeries]
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Rows for the 12-month outlook task.
+
+    history: every prefix that has a valuation 300-480 days later (the target).
+    current: each player's full history, horizon pinned to one year, no target (to be scored).
+    """
+    history: list[dict[str, Any]] = []
+    current: list[dict[str, Any]] = []
+    for _, prow in df.iterrows():
+        pid = prow["player_id"]
+        s = series[pid]
+        static = player_static(prow)
+        n = len(s.values)
+        for i in range(n):
+            j = int(np.searchsorted(s.days, s.days[i] + OUTLOOK_MIN_DAYS))
+            has_target = j < n and s.days[j] - s.days[i] <= OUTLOOK_MAX_DAYS
+            if not has_target and i != n - 1:
+                continue
+            pf = prefix_features(s.values[: i + 1], s.days[: i + 1], s.ages[: i + 1])
+            if has_target:
+                row = assemble_row(pf, (s.days[j] - s.days[i]) / 365.25, static)
+                row.update(
+                    player_id=pid,
+                    date=s.dates[i],
+                    target_value=float(s.values[j]),
+                    target_date=s.dates[j],
+                )
+                history.append(row)
+            if i == n - 1:
+                row = assemble_row(pf, 1.0, static)
+                row.update(player_id=pid, date=s.dates[i])
+                current.append(row)
+    frames = []
+    for rows in (history, current):
+        frame = pd.DataFrame(rows)
+        for cat in CAT_FEATURES:
+            frame[cat] = frame[cat].astype(object).where(frame[cat].notna(), np.nan)
+        frames.append(frame)
+    hist_df, cur_df = frames
+    ret = np.log(hist_df["target_value"]) - np.log(hist_df["last_value_eur"])
+    hist_df["log_return"] = ret
+    hist_df["direction"] = np.where(
+        ret > OUTLOOK_MOVE, "up", np.where(ret < -OUTLOOK_MOVE, "down", "flat")
+    )
+    return hist_df, cur_df
+
+
+@dataclass
+class OutlookModel:
+    """12-month outlook: calibrated P(down/flat/up), point value and conformal range."""
+
+    clf: Any
+    reg: Any
+    ci: "ConformalInterval"
+
+    def predict(self, X: pd.DataFrame) -> pd.DataFrame:
+        proba = self.clf.predict_proba(X[FORECAST_COLS])
+        idx = {c: k for k, c in enumerate(self.clf.classes_)}
+        value = self.reg.predict(X[FORECAST_COLS])
+        lo, hi = self.ci.interval(X[FORECAST_COLS], value)
+        return pd.DataFrame(
+            {
+                "p_up": proba[:, idx["up"]],
+                "p_down": proba[:, idx["down"]],
+                "value": value,
+                "lo": lo,
+                "hi": hi,
+            },
+            index=X.index,
+        )
+
+
+def fit_outlook(train: pd.DataFrame) -> OutlookModel:
+    groups = train["player_id"].to_numpy()
+    clf = GroupCalibratedClassifier(estimator=_hgb_clf(FORECAST_NUM_FEATURES, CAT_FEATURES))
+    clf.fit(train[FORECAST_COLS], train["direction"], groups=groups)
+    reg = AnchoredLogRegressor(_hgb_reg(FORECAST_NUM_FEATURES, CAT_FEATURES), "log_last")
+    reg.fit(train[FORECAST_COLS], train["target_value"])
+    fit_idx, cal_idx = next(
+        GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=SEED).split(train, groups=groups)
+    )
+    cal = train.iloc[cal_idx]
+    cal = cal[cal["date"] >= sorted(cal["date"])[len(cal) // 2]]  # recent half of calibration rows
+    ci = fit_conformal("forecast", FORECAST_COLS, train.iloc[fit_idx], cal)
+    return OutlookModel(clf=clf, reg=reg, ci=ci)
+
+
+def outlook_signal(p_up: float, p_down: float) -> str:
+    if p_up >= OUTLOOK_THRESHOLD:
+        return "Buy"
+    if p_down >= OUTLOOK_THRESHOLD:
+        return "DepreciationRisk"
+    return "Neutral"
+
+
+def _spearman(a: np.ndarray, b: np.ndarray) -> float:
+    return float(np.corrcoef(pd.Series(a).rank(), pd.Series(b).rank())[0, 1])
+
+
+def validate_outlook(history: pd.DataFrame) -> dict[str, Any]:
+    """Out-of-time check: fit on targets before the cutoff, score prefixes on/after it."""
+    recent = history[history["date"] >= OUTLOOK_START]
+    train = recent[recent["target_date"] < OUTLOOK_OOT_CUTOFF]
+    test = recent[recent["date"] >= OUTLOOK_OOT_CUTOFF]
+    pred = fit_outlook(train).predict(test)
+    current = test["last_value_eur"].to_numpy()
+    actual = test["target_value"].to_numpy()
+    direction = test["direction"].to_numpy()
+    liquid = current >= OUTLOOK_MIN_VALUE
+    buy = liquid & (pred["p_up"].to_numpy() >= OUTLOOK_THRESHOLD)
+    risk = liquid & (pred["p_down"].to_numpy() >= OUTLOOK_THRESHOLD)
+    # The rule this replaces: "the price fell a lot, so it is cheap".
+    fell = (test["has_anchor"].to_numpy() == 1) & (
+        np.log(current)
+        - (test["anc_log_ratio_peak"].to_numpy() + np.log(test["peak_value_eur"].to_numpy()))
+        < np.log(0.6)
+    )
+    share = lambda mask, cls: round(float((direction[mask] == cls).mean()), 4) if mask.any() else None
+    med = lambda mask: round(float(np.median(np.log(actual[mask] / current[mask]))), 4) if mask.any() else None
+    return {
+        "cutoff": OUTLOOK_OOT_CUTOFF,
+        "train_rows": int(len(train)),
+        "test_rows": int(len(test)),
+        "test_players": int(test["player_id"].nunique()),
+        "rank_correlation": round(
+            _spearman(np.log(pred["value"].to_numpy() / current), test["log_return"].to_numpy()), 4
+        ),
+        "interval_coverage": round(
+            float(((actual >= pred["lo"].to_numpy()) & (actual <= pred["hi"].to_numpy())).mean()), 4
+        ),
+        "base_rate": {"up": share(liquid, "up"), "down": share(liquid, "down"), "n": int(liquid.sum())},
+        "buy": {"n": int(buy.sum()), "went_up": share(buy, "up"), "went_down": share(buy, "down"),
+                "median_log_return": med(buy)},
+        "depreciation_risk": {"n": int(risk.sum()), "went_down": share(risk, "down"),
+                              "went_up": share(risk, "up"), "median_log_return": med(risk)},
+        "fell_over_40pct_prior_12m": {"n": int(fell.sum()), "went_up": share(fell, "up"),
+                                      "went_down": share(fell, "down"), "median_log_return": med(fell)},
+    }
 
 
 # --------------------------------------------------------------------------- estimators
@@ -980,6 +1130,13 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
         oof.loc[va["player_id"], ["fair", "lo", "hi"]] = np.column_stack([fair_va, lo_va, hi_va])
     log(f"oof screening done ({time.time() - t0:.0f}s)")
 
+    # ---- 12-month outlook (recommendations) ----------------------------------------------
+    outlook_hist, outlook_cur = build_outlook_panel(df, series)
+    outlook_validation = validate_outlook(outlook_hist)
+    outlook_model = fit_outlook(outlook_hist[outlook_hist["date"] >= OUTLOOK_START])
+    outlook_pred = outlook_model.predict(outlook_cur)
+    log(f"outlook done ({time.time() - t0:.0f}s)")
+
     # ---- payloads ----------------------------------------------------------------------
     ci_fc, ci_fd = reg_ci["forecast"], reg_ci["fundamental"]
     fc_lo, fc_hi = ci_fc.interval(test[FORECAST_COLS], reg_pred["forecast"])
@@ -1070,6 +1227,65 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
     log_gap = np.log(np.maximum(oof_fair[anchored], 1.0) / oof_actual[anchored])
     reversal_corr = float(np.corrcoef(log_gap, hidden_return)[0, 1])
 
+    outlook_rows: list[dict[str, Any]] = []
+    for k in range(len(outlook_cur)):
+        r, o = outlook_cur.iloc[k], outlook_pred.iloc[k]
+        p = info.loc[r["player_id"]]
+        cur_val = float(r["last_value_eur"])
+        outlook_rows.append(
+            {
+                "player_id": r["player_id"],
+                "name": str(p["name"]),
+                "age": float(p["age"]),
+                "nationality": str(p["nationality_clean"]),
+                "league_name": str(p["league_name"]),
+                "position": str(p["position"]) if pd.notna(p["position"]) else "Unknown",
+                "peak_club": str(p["peak_club"]) if pd.notna(p["peak_club"]) else "Unknown",
+                "actual_trajectory": str(p["trajectory"]),
+                "current_value_eur": round(cur_val, 2),
+                "valuation_date": r["date"],
+                "expected_value_eur": round(float(o["value"]), 2),
+                "expected_range_eur": [round(float(o["lo"]), 2), round(float(o["hi"]), 2)],
+                "expected_change_eur": round(float(o["value"]) - cur_val, 2),
+                "expected_change_pct": round((float(o["value"]) / cur_val - 1.0) * 100.0, 2),
+                "p_up": round(float(o["p_up"]), 4),
+                "p_down": round(float(o["p_down"]), 4),
+                "signal": outlook_signal(float(o["p_up"]), float(o["p_down"]))
+                if cur_val >= OUTLOOK_MIN_VALUE
+                else "Neutral",
+            }
+        )
+    outlook_payload = {
+        "method": (
+            "Calibrated probability that the market value is more than 5% higher / lower at the "
+            "first valuation 10-16 months ahead, plus a conformal value range. Trained on every "
+            "past (history prefix -> value a year later) pair; scored on each player's full history."
+        ),
+        "horizon_months": 12,
+        "threshold": OUTLOOK_THRESHOLD,
+        "min_value_eur": OUTLOOK_MIN_VALUE,
+        "interval_level": INTERVAL_LEVEL,
+        "validation": outlook_validation,
+        "signal_counts": {
+            s: sum(r["signal"] == s for r in outlook_rows)
+            for s in ("Buy", "Neutral", "DepreciationRisk")
+        },
+        "buy": sorted(
+            [r for r in outlook_rows if r["signal"] == "Buy"],
+            key=lambda r: r["expected_change_eur"],
+            reverse=True,
+        )[:30],
+        "depreciation_risk": sorted(
+            [r for r in outlook_rows if r["signal"] == "DepreciationRisk"],
+            key=lambda r: r["expected_change_eur"],
+        )[:30],
+        "limits": [
+            "Predicts Transfermarkt market value, not sporting quality or transfer fee.",
+            "No performance, injury or contract data.",
+            "Training players all reached a top-5 league by 2025, so growth of young players is flattered.",
+        ],
+    }
+
     league_groups: dict[str, list[float]] = {}
     for r in rows:
         league_groups.setdefault(r["league_name"], []).append(r["forecast_residual_eur"])
@@ -1079,6 +1295,7 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
         "rows": rows,
         "undervalued": top(rows, "Undervalued"),
         "overvalued": top(rows, "Overvalued"),
+        "outlook": outlook_payload,
         "screening_all": {
             "method": (
                 "Out-of-fold fundamental fair value and conformal band (GroupKFold by player) for "
@@ -1228,6 +1445,10 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
         test_matrix=test,
         total_players=int(len(df)),
         history_rows=int(len(hist)) + repairs["history_rows_dropped_nonpositive"],
+        extra={
+            "outlook_model": outlook_model,
+            "outlook_by_player": {r["player_id"]: r for r in outlook_rows},
+        },
     )
     overview["methodology"]["training_seconds"] = round(time.time() - t0, 1)
     log(f"training finished in {time.time() - t0:.0f}s")
