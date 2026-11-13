@@ -663,3 +663,20 @@ def test_trend_fields_in_rows_and_simulate(client):
         assert tp["rising"] == pytest.approx(p5["rising_star"] + p5["growing"], abs=2e-4)
         assert out["predicted_trend"] == max(tp, key=tp.get)
         assert sum(tp.values()) == pytest.approx(1.0, abs=1e-3)
+
+
+def test_simulate_returns_the_price_path_for_charts(client, art):
+    pid = art.test_predictions["rows"][0]["player_id"]
+    s = art.series[pid]
+    base = client.post("/api/simulate", json={"player_id": pid}).json()["player"]
+    assert [p["value_eur"] for p in base["history"]] == list(s.values)
+    assert base["history"][-1]["date"] == s.dates[-1] and base["hypothetical"] == []
+    assert base["forecast_date"] > s.dates[-1]
+    hyp = client.post(
+        "/api/simulate",
+        json={"player_id": pid, "scenario": {"append_valuations": [{"value_eur": 1e6, "years_after": 0.5}]}},
+    ).json()["player"]
+    assert len(hyp["history"]) == len(s.values) and len(hyp["hypothetical"]) == 1
+    assert s.dates[-1] < hyp["hypothetical"][0]["date"] < hyp["forecast_date"]
+    back = client.post("/api/simulate", json={"player_id": pid, "scenario": {"backtest": True}}).json()["player"]
+    assert len(back["history"]) == len(s.values) - 1  # the predicted valuation is not shown as history

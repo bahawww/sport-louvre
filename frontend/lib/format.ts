@@ -33,3 +33,26 @@ export const TRAJECTORY_META: Record<
 export function trajectoryLabel(t: string): string {
   return TRAJECTORY_META[t as TrajectoryClass]?.label ?? t.replace(/_/g, " ");
 }
+
+export const TREND_META: Record<string, { label: string; hint: string; className: string }> = {
+  rising: {
+    label: "Naik / Dekat Puncak",
+    hint: "rekor baru atau dalam 20% dari nilai puncak",
+    className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  },
+  stable: {
+    label: "Stabil",
+    hint: "20-30% di bawah nilai puncak",
+    className: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+  },
+  declining: {
+    label: "Menurun",
+    hint: "30-60% di bawah nilai puncak",
+    className: "bg-orange-500/15 text-orange-400 border-orange-500/30",
+  },
+  falling_sharply: {
+    label: "Jatuh Tajam",
+    hint: "lebih dari 60% di bawah nilai puncak",
+    className: "bg-rose-500/15 text-rose-400 border-rose-500/30",
+  },
+};

@@ -324,7 +324,18 @@ export interface SimulateResponse extends SimulatePrediction {
     last_date: string;
     n_history_points: number;
     in_training_set: boolean;
+    league_name: string;
+    position: string;
+    position_group: string;
+    nationality: string;
+    age: number;
+    peak_value_eur: number;
+    history: { date: string; value_eur: number }[];
+    hypothetical: { date: string; value_eur: number }[];
+    forecast_date: string;
   };
+  predicted_trend?: string;
+  trend_probabilities?: Record<string, number>;
 }
 
 export async function fetchApi<T>(path: string, init?: RequestInit): Promise<T> {

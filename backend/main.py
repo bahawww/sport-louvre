@@ -274,6 +274,32 @@ def _simulate_player(art: DashboardArtifacts, req: SimulateRequest) -> dict[str,
             "warnings": warnings,
         }
     )
+    # Price path for charts: real history, hypothetical points, and the date being forecast.
+    s = art.series[pid]
+    n_real = len(s.values) - (1 if sc.backtest else 0)
+    last_real = pd.Timestamp(s.dates[n_real - 1])
+    elapsed = 0.0
+    hypothetical = []
+    for value_eur, years_after in appended:
+        elapsed += years_after
+        hypothetical.append(
+            {
+                "date": (last_real + pd.Timedelta(days=elapsed * 365.25)).strftime("%Y-%m-%d"),
+                "value_eur": float(value_eur),
+            }
+        )
+    out["player"].update(
+        history=[
+            {"date": d, "value_eur": float(v)}
+            for d, v in zip(s.dates[:n_real], s.values[:n_real])
+        ],
+        hypothetical=hypothetical,
+        forecast_date=(last_real + pd.Timedelta(days=(elapsed + horizon) * 365.25)).strftime("%Y-%m-%d"),
+        age=float(row["age_last"]),
+        peak_value_eur=float(row["peak_value_eur"]),
+        position_group=str(info["position_group"]) if pd.notna(info["position_group"]) else "Unknown",
+        nationality=str(info["nationality_clean"]),
+    )
     out.update(_gap(out["fair_value_eur"], meta["last_value_eur"], out["fair_value_range_eur"], row))
     if not sc.backtest and not appended and not league:
         out["outlook_12m"] = art.extra["outlook_by_player"].get(pid)

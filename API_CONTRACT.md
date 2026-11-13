@@ -95,7 +95,9 @@ Two modes, chosen by `player_id`.
 - `backtest: true`: hide the last real valuation and predict it (cannot be combined with other scenario fields).
 - Club moves are not supported: the dataset has no usable club history.
 
-### B. Synthetic profile (no `player_id`)
+### B. Synthetic profile (no `player_id`): API only
+The web simulator no longer offers this mode; it works on real players only. The endpoint still
+accepts the body below for backward compatibility.
 Legacy body, still valid:
 `{ age, age_at_peak, peak_value_eur, first_value_eur, career_span_years, years_to_peak, value_volatility, num_valuation_points, league_name, nationality }`
 - **new** optional `position_group` (`Forward|Midfielder|Defender|Goalkeeper`); without it the
@@ -108,6 +110,8 @@ Legacy body, still valid:
 - **new** `predicted_trend`, `trend_probabilities` (4 classes; `rising` = `rising_star` + `growing`).
 - `value_range_eur` is a conformal interval at `interval_level` (0.8), not a fixed percentage.
 - **new**: `mode` (`player_whatif|player_backtest|synthetic_profile`), `interval_level`, `models`, `warnings[]`
+- **new** in `player`: `history[{date,value_eur}]`, `hypothetical[{date,value_eur}]`, `forecast_date`,
+  `age`, `peak_value_eur`, `position_group`, `nationality` (price path for charts).
 - **new**, player modes only: `fair_value_eur, fair_value_range_eur, market_value_eur, valuation_gap_eur, valuation_gap_pct, valuation_status, valuation_basis, horizon_years, player{...}, features{...}`,
   and when a scenario is applied `baseline{...}` + `scenario_delta_eur`.
   Without scenario changes the response also carries `outlook_12m` (the player's outlook row).
