@@ -604,3 +604,62 @@ def test_simulate_explanation_and_listed_reasons(client, art):
     listed = o["depreciation_risk"][0]["reasons"][0]
     top_positive = next(c for c in exp["p_down"]["contributions"] if c["contribution"] > 0)
     assert top_positive["group"] == listed["group"]
+
+
+# ----------------------------------------------------------------------------- 4-class trend view
+
+
+def test_trend_view_is_the_same_model_with_two_classes_merged(art):
+    from features import TREND_CLASSES, TREND_OF
+
+    c = art.overview["classification"]
+    t = c["trend"]
+    assert c["primary_view"] == "trend"
+    assert t["classes"] == TREND_CLASSES == ["rising", "stable", "declining", "falling_sharply"]
+    assert t["mapping"] == TREND_OF and set(TREND_OF) == set(CLASSES)
+    assert t["best_model"] == c["clean_mode"]["best_model"]  # no separate model, no separate selection
+    X = art.test_matrix
+    p5 = mp.proba_in_order(art.clf_forecast, X[mp.FORECAST_COLS])
+    p4 = mp.trend_proba(p5)
+    assert np.allclose(p4.sum(axis=1), 1.0)
+    assert np.allclose(p4[:, 0], p5[:, 0] + p5[:, 1]) and np.allclose(p4[:, 1:], p5[:, 2:])
+    best = next(m for m in t["models"] if m["name"] == t["best_model"])
+    assert best == {"name": t["best_model"], **mp.trend_metrics(p5, X["label"])}
+    assert np.array(best["confusion_matrix"]).shape == (4, 4)
+    assert np.array(best["confusion_matrix"]).sum() == 484
+
+
+def test_trend_headline_reports_baseline_and_is_not_inflated_by_leak(art):
+    c = art.overview["classification"]
+    h = c["trend"]["headline"]
+    five = c["clean_mode"]["headline"]
+    assert h["metrics"]["accuracy"] > five["metrics"]["accuracy"]  # merging can only help
+    assert h["persistence"]["accuracy"] > five["persistence"]["accuracy"]  # ...the baseline too
+    assert 0.78 <= h["metrics"]["accuracy"] <= 0.92
+    assert h["metrics"]["accuracy"] > h["persistence"]["accuracy"]
+    assert h["metrics"]["log_loss"] < h["persistence"]["log_loss"]
+    assert h["selective"][0]["min_confidence"] == 0.5 and h["selective"][0]["coverage"] <= 1
+    cv = c["trend"]["validation"]["group_kfold"][c["trend"]["best_model"]]
+    assert {"accuracy_mean", "accuracy_std", "macro_f1_mean", "log_loss_mean"} <= set(cv)
+    assert c["trend"]["validation"]["fixed_horizon"][c["trend"]["best_model"]]["accuracy"] > 0.75
+    for s in art.overview["out_of_time"]["sets"].values():
+        for m in s["classification"].values():
+            assert m["trend"]["accuracy"] >= m["accuracy"]
+
+
+def test_trend_fields_in_rows_and_simulate(client):
+    from features import TREND_OF
+
+    rows = client.get("/api/test-predictions").json()["rows"]
+    for r in rows:
+        assert r["actual_trend"] == TREND_OF[r["actual_trajectory"]]
+        assert r["pred_trend"] in set(TREND_OF.values())
+    acc = np.mean([r["actual_trend"] == r["pred_trend"] for r in rows])
+    head = client.get("/api/overview").json()["classification"]["trend"]["headline"]["metrics"]["accuracy"]
+    assert acc == pytest.approx(head, abs=1e-4)
+    for body in ({"player_id": rows[0]["player_id"]}, PROFILE_BODY):
+        out = client.post("/api/simulate", json=body).json()
+        tp, p5 = out["trend_probabilities"], out["trajectory_probabilities"]
+        assert tp["rising"] == pytest.approx(p5["rising_star"] + p5["growing"], abs=2e-4)
+        assert out["predicted_trend"] == max(tp, key=tp.get)
+        assert sum(tp.values()) == pytest.approx(1.0, abs=1e-3)

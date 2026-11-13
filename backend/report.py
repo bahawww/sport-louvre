@@ -40,11 +40,16 @@ def main() -> None:
     w(f"Model version `{mc['version']}`, trained {mc['trained_at']} (scikit-learn {mc['scikit_learn']}, seed {mc['seed']}). "
       f"Data as of {card['data_as_of']}: {card['players']} players, {card['valuation_points']} valuations since {card['first_valuation']}.\n")
     hc = c["clean_mode"]["headline"]
+    ht = c["trend"]["headline"]
     hf = tasks["forecast"]["headline"]
     w("## 0. Headline: model vs baseline\n")
     w("| Task | Model | Baseline | Verdict |")
     w("|---|---|---|---|")
-    w(f"| Trajectory (accuracy / macro-F1) | {hc['metrics']['accuracy']:.3f} / {hc['metrics']['macro_f1']:.3f} | "
+    w(f"| **Trend, 4 classes** (accuracy / macro-F1) | **{ht['metrics']['accuracy']:.3f}** / {ht['metrics']['macro_f1']:.3f} | "
+      f"persistence {ht['persistence']['accuracy']:.3f} / {ht['persistence']['macro_f1']:.3f} | "
+      f"+{ht['gain_vs_persistence']['accuracy_pp']:.1f} pp accuracy, +{ht['gain_vs_persistence']['macro_f1_pp']:.1f} pp macro-F1, "
+      f"log-loss −{ht['gain_vs_persistence']['log_loss_reduction']:.0%} |")
+    w(f"| Trajectory, 5 classes (accuracy / macro-F1) | {hc['metrics']['accuracy']:.3f} / {hc['metrics']['macro_f1']:.3f} | "
       f"persistence {hc['persistence']['accuracy']:.3f} / {hc['persistence']['macro_f1']:.3f} | "
       f"+{hc['gain_vs_persistence']['accuracy_pp']:.1f} pp accuracy, +{hc['gain_vs_persistence']['macro_f1_pp']:.1f} pp macro-F1, "
       f"log-loss −{hc['gain_vs_persistence']['log_loss_reduction']:.0%} |")
@@ -94,6 +99,31 @@ def main() -> None:
     w(f"Leakage demo ({c['leakage_mode']['best_model']} + CSV leak columns): accuracy {leak['accuracy']:.4f}.")
     w(f"Synthetic-profile classifier (form fields only): accuracy {prof['accuracy']:.4f}, macro-F1 {prof['macro_f1']:.4f}, ECE {prof['ece']:.4f}.\n")
 
+    tr = c["trend"]
+    w("### Headline view: 4-class trend\n")
+    w(f"{tr['definition']} {tr['why']} Same model and probabilities as the 5-class view; nothing is retrained or re-selected.\n")
+    w("| Model | Accuracy | Macro-F1 | ECE | Brier | Log-loss |")
+    w("|---|---|---|---|---|---|")
+    for m in tr["models"]:
+        mark = " (selected)" if m["name"] == tr["best_model"] else ""
+        w(f"| {m['name']}{mark} | {m['accuracy']:.4f} | {m['macro_f1']:.4f} | {m['ece']:.4f} | {m['brier']:.4f} | {m['log_loss']:.4f} |")
+    tcv = tr["validation"]["group_kfold"][tr["best_model"]]
+    tpc = tr["validation"]["group_kfold"]["Persistence (last state)"]
+    tfx = tr["validation"]["fixed_horizon"][tr["best_model"]]
+    w(f"\nGroupKFold(5): accuracy {tcv['accuracy_mean']:.4f} ± {tcv['accuracy_std']:.4f} (persistence {tpc['accuracy_mean']:.4f}), "
+      f"macro-F1 {tcv['macro_f1_mean']:.4f}. Fixed horizon: accuracy {tfx['accuracy']:.4f}, macro-F1 {tfx['macro_f1']:.4f}.")
+    oo = o["out_of_time"]["sets"]["unseen_players_future"]["classification"]
+    w("Out-of-time, unseen players: " + ", ".join(f"{n} {m['trend']['accuracy']:.4f}" for n, m in oo.items()) + ".")
+    w("\nConfusion matrix (rows = actual, columns = predicted: " + ", ".join(tr["classes"]) + "):\n")
+    best_t = next(m for m in tr["models"] if m["name"] == tr["best_model"])
+    for cls, row_ in zip(tr["classes"], best_t["confusion_matrix"]):
+        w(f"- {cls}: {row_}")
+    w("\nAccuracy when the model only answers above a confidence level:\n")
+    w("| Min confidence | Share of players answered | Accuracy |")
+    w("|---|---|---|")
+    for sl in best_t["selective"]:
+        w(f"| {sl['min_confidence']:.1f} | {sl['coverage']:.1%} | {sl['accuracy']:.1%} |")
+    w("")
     w("## 3. Regression\n")
     w("| Model | MAE | RMSE | R² (€) | MAE log | RMSE log | R² log | Median APE |")
     w("|---|---|---|---|---|---|---|---|")

@@ -93,6 +93,20 @@ Ordinal (Frank & Hall) decomposition of the five ordered classes over HistGradie
 cumulative model calibrated isotonic out-of-fold with folds grouped by player. Compared with
 calibrated multinomial HGB, Logistic Regression, Random Forest and a persistence baseline.
 
+### Accuracy ceiling of the 5-class label (tested 2026-11-14)
+Grouped CV accuracy is about 0.71 against 0.66 for persistence, and these attempts did not move it
+beyond fold noise (std about 0.02):
+- season stats (appearances, starts, goals, assists), transfers and injuries from
+  salimt/football-datasets, used strictly as-of: 0.709 -> 0.715;
+- calendar month and league-wide mood of the previous update round: 0.714;
+- deeper / shallower / class-weighted boosting: 0.706-0.717; training on all history: 0.697.
+
+A completed season is already in the price by the time it can be used, and the next move depends
+on things that have not happened yet. The label also splits hairs: `rising_star` vs `growing` is
+"strictly new record or not". Coarser definitions score higher, but so does persistence:
+4 classes (rising+growing merged) 0.854 vs 0.832, 3 classes 0.889 vs 0.873. Within one class the
+model is right 96.9% of the time. At confidence >= 0.7 (43% of players) accuracy is 0.875.
+
 ### Validation
 - Stratified 80:20 split **by player** (seed 42), scored on each test player's last update.
 - Model selection by GroupKFold(5) on training players, never on the test set.

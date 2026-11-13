@@ -61,6 +61,8 @@ from features import (
     FUNDAMENTAL_NUM_FEATURES,
     PROFILE_CAT_FEATURES,
     PROFILE_NUM_FEATURES,
+    TREND_CLASSES,
+    TREND_OF,
     assemble_row,
     classify_trajectory,
     prefix_features,
@@ -690,12 +692,45 @@ def expected_calibration_error(proba: np.ndarray, y_idx: np.ndarray, bins: int =
     return float(ece)
 
 
-def clf_metrics(proba: np.ndarray, y: Any) -> dict[str, Any]:
+def trend_proba(proba: np.ndarray) -> np.ndarray:
+    """5-class probabilities (CLASSES order) -> 4-class trend probabilities (TREND_CLASSES order)."""
+    out = np.zeros((len(proba), len(TREND_CLASSES)))
+    for k, c in enumerate(CLASSES):
+        out[:, TREND_CLASSES.index(TREND_OF[c])] += proba[:, k]
+    return out
+
+
+def trend_labels(y: Any) -> np.ndarray:
+    return np.array([TREND_OF[c] for c in np.asarray(y)], dtype=object)
+
+
+def selective_accuracy(proba: np.ndarray, y_idx: np.ndarray) -> list[dict[str, float]]:
+    """Accuracy when the model only answers above a confidence level."""
+    conf, hit = proba.max(axis=1), proba.argmax(axis=1) == y_idx
+    out = []
+    for level in (0.5, 0.6, 0.7, 0.8, 0.9):
+        m = conf >= level
+        out.append(
+            {
+                "min_confidence": level,
+                "coverage": round(float(m.mean()), 4),
+                "accuracy": round(float(hit[m].mean()), 4) if m.any() else None,
+            }
+        )
+    return out
+
+
+def trend_metrics(proba5: np.ndarray, y5: Any) -> dict[str, Any]:
+    """Metrics of the 4-class trend view derived from 5-class probabilities and labels."""
+    return clf_metrics(trend_proba(proba5), trend_labels(y5), TREND_CLASSES)
+
+
+def clf_metrics(proba: np.ndarray, y: Any, classes: list[str] = CLASSES) -> dict[str, Any]:
     y = np.asarray(y)
-    y_idx = np.array([CLASSES.index(c) for c in y])
+    y_idx = np.array([classes.index(c) for c in y])
     pred_idx = proba.argmax(axis=1)
-    pred = np.array(CLASSES)[pred_idx]
-    onehot = np.eye(len(CLASSES))[y_idx]
+    pred = np.array(classes)[pred_idx]
+    onehot = np.eye(len(classes))[y_idx]
     p = np.clip(proba, 1e-9, 1.0)
     p = p / p.sum(axis=1, keepdims=True)
     return {
@@ -710,9 +745,10 @@ def clf_metrics(proba: np.ndarray, y: Any) -> dict[str, Any]:
         ),
         "ece": round(expected_calibration_error(proba, y_idx), 4),
         "brier": round(float(((proba - onehot) ** 2).sum(axis=1).mean()), 4),
-        "log_loss": round(float(log_loss(y_idx, p, labels=list(range(len(CLASSES))))), 4),
+        "log_loss": round(float(log_loss(y_idx, p, labels=list(range(len(classes))))), 4),
         "ordinal_mae": round(float(np.abs(pred_idx - y_idx).mean()), 4),
-        "confusion_matrix": confusion_matrix(y, pred, labels=CLASSES).tolist(),
+        "confusion_matrix": confusion_matrix(y, pred, labels=classes).tolist(),
+        "selective": selective_accuracy(proba, y_idx),
     }
 
 
@@ -939,11 +975,16 @@ def _cv_select(
         for name, spec in specs.items():
             est = _fit(clone(spec), tr[cols], tr[target], tr["player_id"].to_numpy())
             if kind == "clf":
-                per_model[name].append(clf_metrics(proba_in_order(est, va[cols]), va[target]))
+                proba_va = proba_in_order(est, va[cols])
+                m = clf_metrics(proba_va, va[target])
+                t = trend_metrics(proba_va, va[target])
+                m.update({f"trend_{k}": t[k] for k in ("accuracy", "macro_f1", "log_loss", "ece")})
+                per_model[name].append(m)
             else:
                 per_model[name].append(reg_metrics(va[target], est.predict(va[cols])))
     keys = (
-        ["accuracy", "macro_f1", "log_loss", "brier", "ece"]
+        ["accuracy", "macro_f1", "log_loss", "brier", "ece",
+         "trend_accuracy", "trend_macro_f1", "trend_log_loss", "trend_ece"]
         if kind == "clf"
         else ["mae", "rmse", "r2", "mae_log", "rmse_log", "r2_log"]
     )
@@ -987,22 +1028,26 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
     clf_cv, best_clf = _cv_select(clf_specs, FORECAST_COLS, train, "clf", log)
     clf_models: dict[str, Any] = {}
     clean_rows: list[dict[str, Any]] = []
+    trend_rows: list[dict[str, Any]] = []
     for name, spec in clf_specs.items():
         est = _fit(clone(spec), train[FORECAST_COLS], train["label"], groups)
         clf_models[name] = est
-        m = clf_metrics(proba_in_order(est, test[FORECAST_COLS]), test["label"])
+        proba_m = proba_in_order(est, test[FORECAST_COLS])
+        m = clf_metrics(proba_m, test["label"])
         m["name"] = name
         m["feature_importance"] = (
             _clf_importance(est, test[FORECAST_COLS], test["label"]) if name == best_clf else []
         )
         clean_rows.append(m)
+        trend_rows.append({"name": name, **trend_metrics(proba_m, test["label"])})
     static_map = {row["player_id"]: player_static(row) for _, row in df.iterrows()}
     test_fixed = fixed_horizon_frame(test["player_id"].tolist(), series, static_map)
-    fixed_clf = {
-        name: clf_metrics(proba_in_order(est, test_fixed[FORECAST_COLS]), test["label"])
-        for name, est in clf_models.items()
-    }
-    for m in fixed_clf.values():
+    fixed_clf, fixed_trend = {}, {}
+    for name, est in clf_models.items():
+        proba_f = proba_in_order(est, test_fixed[FORECAST_COLS])
+        fixed_clf[name] = clf_metrics(proba_f, test["label"])
+        fixed_trend[name] = trend_metrics(proba_f, test["label"])
+    for m in [*fixed_clf.values(), *fixed_trend.values()]:
         m.pop("confusion_matrix")
     log(f"classifiers done ({time.time() - t0:.0f}s)")
 
@@ -1179,7 +1224,10 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
     prof_specs = classifier_specs(PROFILE_NUM_FEATURES, PROFILE_CAT_FEATURES, full=False)
     best_prof = best_clf if best_clf in prof_specs else next(iter(prof_specs))
     clf_profile = _fit(clone(prof_specs[best_prof]), train[PROFILE_COLS], train["label"], groups)
-    prof_m = clf_metrics(proba_in_order(clf_profile, test[PROFILE_COLS]), test["label"])
+    prof_proba = proba_in_order(clf_profile, test[PROFILE_COLS])
+    prof_m = clf_metrics(prof_proba, test["label"])
+    prof_trend = trend_metrics(prof_proba, test["label"])
+    prof_m["trend"] = {k: prof_trend[k] for k in ("accuracy", "macro_f1", "ece", "brier", "log_loss")}
     prof_m["name"] = best_prof
     log(f"profile classifier done ({time.time() - t0:.0f}s)")
 
@@ -1213,8 +1261,11 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
     for set_name, sdf in oot_sets.items():
         entry: dict[str, Any] = {"rows": int(len(sdf)), "classification": {}, "regression": {}}
         for name, est in oot_clf.items():
-            m = clf_metrics(proba_in_order(est, sdf[FORECAST_COLS]), sdf["label"])
+            proba_o = proba_in_order(est, sdf[FORECAST_COLS])
+            m = clf_metrics(proba_o, sdf["label"])
             m.pop("confusion_matrix")
+            t = trend_metrics(proba_o, sdf["label"])
+            m["trend"] = {k: t[k] for k in ("accuracy", "macro_f1", "ece", "brier", "log_loss")}
             entry["classification"][name] = m
         for task, models in oot_reg.items():
             entry["regression"][task] = {
@@ -1267,6 +1318,7 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
     fd_lo, fd_hi = ci_fd.interval(test[FUNDAMENTAL_COLS], reg_pred["fundamental"])
     proba_test = proba_in_order(clf_models[best_clf], test[FORECAST_COLS])
     pred_clean = np.array(CLASSES)[proba_test.argmax(axis=1)]
+    trend_test = trend_proba(proba_test)
     pred_leak = leak_preds[best_leak]
     info = df.set_index("player_id")
 
@@ -1313,6 +1365,9 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
                 "pred_trajectory_clean": str(pred_clean[k]),
                 "pred_trajectory_leakage": str(pred_leak[k]),
                 "pred_trajectory_confidence": round(float(proba_test[k].max()), 4),
+                "actual_trend": TREND_OF[actual_traj],
+                "pred_trend": TREND_CLASSES[int(trend_test[k].argmax())],
+                "pred_trend_confidence": round(float(trend_test[k].max()), 4),
                 "previous_value_eur": round(float(np.expm1(r["log_last"])), 2),
                 "forecast_value_eur": round(float(reg_pred["forecast"][k]), 2),
                 "forecast_range_eur": [round(float(fc_lo[k]), 2), round(float(fc_hi[k]), 2)],
@@ -1558,6 +1613,38 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
                 ),
             },
             "leakage_mode": {"models": leak_rows, "best_model": best_leak},
+            # Headline view: same model, rising_star + growing merged (see features.TREND_OF).
+            "primary_view": "trend",
+            "trend": {
+                "classes": TREND_CLASSES,
+                "mapping": TREND_OF,
+                "definition": (
+                    "rising = new record or within 20% of the career peak (rising_star + growing); "
+                    "stable = 20-30% below; declining = 30-60% below; falling_sharply = 60%+ below."
+                ),
+                "why": (
+                    "rising_star vs growing only asks whether the next valuation is a strict new "
+                    "record; price history cannot separate the two (about half of all 5-class errors)."
+                ),
+                "models": trend_rows,
+                "best_model": best_clf,
+                "validation": {
+                    "group_kfold": {
+                        name: {k[len("trend_"):]: v for k, v in cv.items() if k.startswith("trend_")}
+                        for name, cv in clf_cv.items()
+                    },
+                    "fixed_horizon": fixed_trend,
+                },
+                "calibration": ev.classifier_calibration(
+                    trend_test, trend_labels(test["label"]), TREND_CLASSES
+                ),
+                "headline": ev.classification_headline(
+                    best_clf,
+                    next(m for m in trend_rows if m["name"] == best_clf),
+                    next(m for m in trend_rows if m["name"].startswith("Persistence")),
+                    fixed_trend[best_clf],
+                ),
+            },
             "profile_mode": {
                 "models": [prof_m],
                 "best_model": best_prof,
@@ -1763,6 +1850,14 @@ def player_feature_row(
     return row, meta
 
 
+def _trend_fields(proba: np.ndarray) -> dict[str, Any]:
+    trend = trend_proba(proba.reshape(1, -1))[0]
+    return {
+        "predicted_trend": TREND_CLASSES[int(trend.argmax())],
+        "trend_probabilities": {c: round(float(p), 4) for c, p in zip(TREND_CLASSES, trend)},
+    }
+
+
 def predict_feature_row(art: DashboardArtifacts, row: dict[str, Any]) -> dict[str, Any]:
     """Run the forecast, fundamental and trajectory models on one assembled feature row."""
     X = pd.DataFrame([row])
@@ -1776,6 +1871,7 @@ def predict_feature_row(art: DashboardArtifacts, row: dict[str, Any]) -> dict[st
     return {
         "predicted_trajectory": CLASSES[int(proba.argmax())],
         "trajectory_probabilities": {c: round(float(p), 4) for c, p in zip(CLASSES, proba)},
+        **_trend_fields(proba),
         "predicted_value_eur": round(float(forecast[0]), 2),
         "value_range_eur": [round(float(fc_lo[0]), 2), round(float(fc_hi[0]), 2)],
         "fair_value_eur": round(float(fair[0]), 2),
@@ -1809,6 +1905,7 @@ def predict_profile(art: DashboardArtifacts, fields: dict[str, Any]) -> dict[str
     return {
         "predicted_trajectory": CLASSES[int(proba.argmax())],
         "trajectory_probabilities": {c: round(float(p), 4) for c, p in zip(CLASSES, proba)},
+        **_trend_fields(proba),
         "predicted_value_eur": round(value, 2),
         "value_range_eur": [
             round(min(max(float(np.expm1(log_lo)), 0.0), value), 2),

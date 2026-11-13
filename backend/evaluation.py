@@ -106,14 +106,16 @@ def reliability_bins(prob: Any, hit: Any, bins: int = 10) -> list[dict[str, Any]
     return out
 
 
-def classifier_calibration(proba: np.ndarray, y: Any) -> dict[str, Any]:
-    """Reliability data for a 5-class classifier: top-label and one-vs-rest per class."""
-    y_idx = np.array([CLASSES.index(c) for c in np.asarray(y)])
+def classifier_calibration(
+    proba: np.ndarray, y: Any, classes: list[str] = CLASSES
+) -> dict[str, Any]:
+    """Reliability data for a classifier: top-label and one-vs-rest per class."""
+    y_idx = np.array([classes.index(c) for c in np.asarray(y)])
     top = proba.argmax(axis=1)
     return {
         "top_label": reliability_bins(proba.max(axis=1), top == y_idx),
         "per_class": {
-            c: reliability_bins(proba[:, k], y_idx == k, bins=5) for k, c in enumerate(CLASSES)
+            c: reliability_bins(proba[:, k], y_idx == k, bins=5) for k, c in enumerate(classes)
         },
     }
 
@@ -172,6 +174,7 @@ def classification_headline(
         "model": name,
         "metrics": {k: model[k] for k in keep},
         "persistence": {k: persistence[k] for k in keep},
+        "selective": model.get("selective"),
         "gain_vs_persistence": {
             "accuracy_pp": round((model["accuracy"] - persistence["accuracy"]) * 100, 2),
             "macro_f1_pp": round((model["macro_f1"] - persistence["macro_f1"]) * 100, 2),

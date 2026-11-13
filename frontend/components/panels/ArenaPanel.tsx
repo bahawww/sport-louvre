@@ -38,6 +38,8 @@ export function ArenaPanel({
     return ms.find((m) => m.name === overview.regression.best_model) ?? ms[0];
   }, [overview]);
 
+  const trend = overview.classification.trend;
+
   const regTasks = useMemo(
     () =>
       overview.regression.tasks
@@ -136,12 +138,24 @@ export function ArenaPanel({
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
-          <p className="text-xs font-medium text-[#94A3B8]">Clean Classification Best</p>
-          <p className="mt-2 text-3xl font-extrabold text-[#10B981]">{fmt.pct(cleanBest.accuracy)}</p>
-          <p className="mt-1 text-xs text-[#94A3B8]">
-            {cleanBest.name} · Macro-F1 {fmt.pct(cleanBest.macro_f1 ?? cleanBest.f1_weighted)}
-            {cleanBest.ece !== undefined ? ` · ECE ${cleanBest.ece.toFixed(3)}` : ""}
+          <p className="text-xs font-medium text-[#94A3B8]">
+            {trend ? "Akurasi Tren (4 Kelas, Clean)" : "Clean Classification Best"}
           </p>
+          <p className="mt-2 text-3xl font-extrabold text-[#10B981]">
+            {fmt.pct(trend ? trend.headline.metrics.accuracy : cleanBest.accuracy)}
+          </p>
+          {trend ? (
+            <p className="mt-1 text-xs text-[#94A3B8]">
+              Baseline tanpa model {fmt.pct(trend.headline.persistence.accuracy)} · Macro-F1{" "}
+              {fmt.pct(trend.headline.metrics.macro_f1)} · rincian 5 kelas{" "}
+              {fmt.pct(cleanBest.accuracy)}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-[#94A3B8]">
+              {cleanBest.name} · Macro-F1 {fmt.pct(cleanBest.macro_f1 ?? cleanBest.f1_weighted)}
+              {cleanBest.ece !== undefined ? ` · ECE ${cleanBest.ece.toFixed(3)}` : ""}
+            </p>
+          )}
         </div>
         <div className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
           <p className="text-xs font-medium text-[#94A3B8]">Leakage Accuracy Inflation</p>

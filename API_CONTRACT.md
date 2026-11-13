@@ -25,6 +25,10 @@ every field that existed before is still present with the same type.
   - **new** `task: "forecast"`, `tasks: { forecast, fundamental, profile }`, each
     `{ models[], best_model, features[], validation: { group_kfold, fixed_horizon, holdout_value_ge_50m }, intervals: { method, holdout: { level, coverage, median_width_ratio, n }, q_hat_log, n_calibration } }`
   - `tasks.fundamental.tautology_probe`: how well the fundamental features rebuild the last price
+- **new** `classification.primary_view: "trend"` and `classification.trend`: the headline 4-class view
+  (`rising_star` + `growing` merged into `rising`), derived from the same model's probabilities:
+  `{ classes, mapping, definition, why, models[] (4x4 confusion_matrix, selective[]), best_model, validation{group_kfold, fixed_horizon}, calibration, headline }`.
+  Every classifier metric block also carries `selective[]`: `{ min_confidence, coverage, accuracy }`.
 - **new** `classification.clean_mode.headline`: selected model next to the persistence baseline
   (`metrics, persistence, gain_vs_persistence, fixed_horizon`); `calibration`: reliability bins
   (`top_label[]`, `per_class{}`; each bin `lo, hi, n, predicted, observed`).
@@ -46,7 +50,8 @@ every field that existed before is still present with the same type.
     `Overvalued` if above, else `Fair`.
   - **new** `valuation_basis`: `ok`, `breakout` (above the band with a new all-time high in the
     hidden 12 months) or `short_history` (< 12 months of history). Only `ok` rows are ever flagged.
-  - **new**: `position, position_group, fair_value_eur, fair_value_range_eur, previous_value_eur, forecast_value_eur, forecast_range_eur, forecast_residual_eur, pred_trajectory_confidence`
+  - **new**: `actual_trend, pred_trend, pred_trend_confidence` (4-class view),
+    `position, position_group, fair_value_eur, fair_value_range_eur, previous_value_eur, forecast_value_eur, forecast_range_eur, forecast_residual_eur, pred_trajectory_confidence`
 - `undervalued` / `overvalued`: up to 15 flagged test rows, largest absolute gap first.
 - **new** `screening_all`: out-of-fold fair value for all 2,418 players:
   `{ method, players, metrics, band_coverage, gap_vs_hidden_window_return_corr, status_counts, basis_counts, undervalued[25], overvalued[25] }`
@@ -100,6 +105,7 @@ Legacy body, still valid:
 
 ### Response (both modes)
 `predicted_trajectory, trajectory_probabilities, predicted_value_eur, value_range_eur, scouting_verdict`
+- **new** `predicted_trend`, `trend_probabilities` (4 classes; `rising` = `rising_star` + `growing`).
 - `value_range_eur` is a conformal interval at `interval_level` (0.8), not a fixed percentage.
 - **new**: `mode` (`player_whatif|player_backtest|synthetic_profile`), `interval_level`, `models`, `warnings[]`
 - **new**, player modes only: `fair_value_eur, fair_value_range_eur, market_value_eur, valuation_gap_eur, valuation_gap_pct, valuation_status, valuation_basis, horizon_years, player{...}, features{...}`,

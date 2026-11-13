@@ -1,12 +1,13 @@
 # Metrics report: before vs after
 
-Model version `b5d331290304adf5`, trained 2026-11-13T22:17:26+00:00 (scikit-learn 1.6.1, seed 42). Data as of 2026-02-11: 2418 players, 47903 valuations since 2004-10-03.
+Model version `ce625d5b8a79650e`, trained 2026-11-13T22:49:24+00:00 (scikit-learn 1.6.1, seed 42). Data as of 2026-02-11: 2418 players, 47903 valuations since 2004-10-03.
 
 ## 0. Headline: model vs baseline
 
 | Task | Model | Baseline | Verdict |
 |---|---|---|---|
-| Trajectory (accuracy / macro-F1) | 0.678 / 0.626 | persistence 0.653 / 0.513 | +2.5 pp accuracy, +11.3 pp macro-F1, log-loss −49% |
+| **Trend, 4 classes** (accuracy / macro-F1) | **0.845** / 0.709 | persistence 0.829 / 0.694 | +1.6 pp accuracy, +1.5 pp macro-F1, log-loss −43% |
+| Trajectory, 5 classes (accuracy / macro-F1) | 0.678 / 0.626 | persistence 0.653 / 0.513 | +2.5 pp accuracy, +11.3 pp macro-F1, log-loss −49% |
 | Forecast, euro (MAE / RMSE) | €1.66M / €3.62M | naive €1.63M / €3.50M | **does not beat** naive |
 | Forecast, log (RMSE log) | 0.2538 | naive 0.2959 | beats naive (14% less error) |
 | Forecast, players ≥ €50M (MAE, n=27) | €8.90M | naive €7.04M | **does not beat** naive |
@@ -38,6 +39,38 @@ GroupKFold(5) by player: accuracy 0.7135 ± 0.0140, macro-F1 0.6635 ± 0.0090, l
 Fixed horizon (date of the next update not known, horizon pinned to 0.45y): accuracy 0.6694, macro-F1 0.5821, ECE 0.0381, Brier 0.4173, log-loss 0.7210.
 Leakage demo (Ordinal HGB (calibrated) + CSV leak columns): accuracy 1.0000.
 Synthetic-profile classifier (form fields only): accuracy 0.5207, macro-F1 0.4574, ECE 0.0385.
+
+### Headline view: 4-class trend
+
+rising = new record or within 20% of the career peak (rising_star + growing); stable = 20-30% below; declining = 30-60% below; falling_sharply = 60%+ below. rising_star vs growing only asks whether the next valuation is a strict new record; price history cannot separate the two (about half of all 5-class errors). Same model and probabilities as the 5-class view; nothing is retrained or re-selected.
+
+| Model | Accuracy | Macro-F1 | ECE | Brier | Log-loss |
+|---|---|---|---|---|---|
+| Ordinal HGB (calibrated) (selected) | 0.8450 | 0.7094 | 0.0316 | 0.2269 | 0.4113 |
+| HistGradientBoosting (calibrated) | 0.8471 | 0.7263 | 0.0182 | 0.2221 | 0.4118 |
+| Logistic Regression | 0.8409 | 0.6722 | 0.0336 | 0.2355 | 0.4538 |
+| Random Forest | 0.8430 | 0.6940 | 0.0318 | 0.2299 | 0.4588 |
+| Persistence (last state) | 0.8285 | 0.6940 | 0.1030 | 0.3184 | 0.7224 |
+
+GroupKFold(5): accuracy 0.8511 ± 0.0141 (persistence 0.8319), macro-F1 0.7317. Fixed horizon: accuracy 0.8430, macro-F1 0.7101.
+Out-of-time, unseen players: Ordinal HGB (calibrated) 0.8243, Persistence (last state) 0.8071.
+
+Confusion matrix (rows = actual, columns = predicted: rising, stable, declining, falling_sharply):
+
+- rising: [232, 4, 2, 1]
+- stable: [23, 8, 11, 0]
+- declining: [7, 7, 67, 8]
+- falling_sharply: [1, 0, 11, 102]
+
+Accuracy when the model only answers above a confidence level:
+
+| Min confidence | Share of players answered | Accuracy |
+|---|---|---|
+| 0.5 | 95.0% | 87.2% |
+| 0.6 | 85.7% | 89.4% |
+| 0.7 | 80.0% | 91.0% |
+| 0.8 | 73.1% | 92.7% |
+| 0.9 | 58.1% | 96.1% |
 
 ## 3. Regression
 
@@ -282,4 +315,4 @@ reasons = feature groups that raise this player's probability most, measured by 
 - Intended use: Shortlisting and what-if exploration for scouts and analysts.
 - Not for: Pricing a transfer, judging sporting quality, or decisions without a scout's review.
 
-Training time: 452.8 s. Panel rows used for training: 21700.
+Training time: 585.7 s. Panel rows used for training: 21700.

@@ -15,6 +15,18 @@ import numpy as np
 
 CLASSES: list[str] = ["rising_star", "growing", "stable", "declining", "falling_sharply"]
 
+# Headline view of the same label: `rising_star` and `growing` differ only in whether the next
+# valuation is a strict new record, which price history cannot tell apart. Merged, the class
+# means "at or within 20% of the career peak".
+TREND_CLASSES: list[str] = ["rising", "stable", "declining", "falling_sharply"]
+TREND_OF: dict[str, str] = {
+    "rising_star": "rising",
+    "growing": "rising",
+    "stable": "stable",
+    "declining": "declining",
+    "falling_sharply": "falling_sharply",
+}
+
 CAT_FEATURES: list[str] = ["league_name", "nationality", "position", "position_group"]
 
 # Task 1 - next-update forecasting: full lag state of the price series.

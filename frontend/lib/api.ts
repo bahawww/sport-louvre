@@ -60,6 +60,27 @@ export interface RegressionTask {
 
 export type RegressionTaskName = "forecast" | "fundamental" | "profile";
 
+export interface ClassifierHeadline {
+  model: string;
+  metrics: Record<string, number>;
+  persistence: Record<string, number>;
+  gain_vs_persistence: { accuracy_pp: number; macro_f1_pp: number; log_loss_reduction: number };
+  fixed_horizon: Record<string, number>;
+  selective?: { min_confidence: number; coverage: number; accuracy: number | null }[] | null;
+}
+
+export interface TrendView {
+  classes: string[];
+  mapping: Record<string, string>;
+  definition: string;
+  why: string;
+  models: (ClassificationModelMetrics & {
+    selective?: { min_confidence: number; coverage: number; accuracy: number | null }[];
+  })[];
+  best_model: string;
+  headline: ClassifierHeadline;
+}
+
 export interface OverviewResponse {
   dataset: {
     total_players: number;
@@ -79,6 +100,8 @@ export interface OverviewResponse {
       models: ClassificationModelMetrics[];
       best_model: string;
     };
+    primary_view?: string;
+    trend?: TrendView;
   };
   regression: {
     models: RegressionModelMetrics[];
