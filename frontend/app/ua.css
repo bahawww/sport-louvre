@@ -1,0 +1,758 @@
+/* Dibuat dari design/bundle.css oleh scripts/gen-tokens.mjs. Jangan diedit langsung. */
+@layer components {
+  /* Udara Jakarta — komponen sebagai kelas CSS. Butuh tokens.css. */
+
+  .ua-root {
+    font-family: var(--font-sans);
+    color: var(--text);
+    background: var(--bg);
+    font-variant-numeric: tabular-nums;
+  }
+  .ua-root :focus-visible {
+    outline: 2px solid var(--series-1);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* Tipografi bantu */
+  .ua-display {
+    margin: 0;
+    max-width: 15ch;
+    font-size: clamp(36px, 5.4vw, 68px);
+    line-height: 1.02;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+  }
+  .ua-page-title {
+    margin: 0;
+    max-width: 18ch;
+    font-size: clamp(32px, 4.6vw, 56px);
+    line-height: 1.04;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+  }
+  .ua-section-title {
+    margin: 0;
+    font-size: 26px;
+    line-height: 1.2;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  .ua-desc {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--text-muted);
+    max-width: 64ch;
+  }
+  .ua-lead {
+    margin: 0;
+    max-width: 34em;
+    font-size: clamp(19px, 1.9vw, 24px);
+    line-height: 1.5;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+  .ua-lead strong {
+    font-weight: 800;
+    color: var(--text);
+  }
+  .ua-mark-1 {
+    box-shadow: inset 0 -3px 0 var(--series-1);
+  }
+  .ua-mark-2 {
+    box-shadow: inset 0 -3px 0 var(--series-2);
+  }
+  .ua-sample {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    color: var(--warning);
+  }
+  .ua-sample::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+    background: currentColor;
+  }
+
+  /* Panel */
+  .ua-panel {
+    background: var(--panel);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
+  }
+
+  /* Button */
+  .ua-btn {
+    font-family: var(--font-sans);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: 44px;
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    border: 1px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .ua-btn--primary {
+    background: var(--text);
+    color: var(--bg);
+  }
+  .ua-btn--primary:hover {
+    background: var(--series-1);
+    color: #ffffff;
+  }
+  .ua-btn--secondary {
+    background: transparent;
+    color: var(--text);
+    border-color: var(--rule);
+  }
+  .ua-btn--secondary:hover {
+    background: var(--panel);
+  }
+  .ua-btn--chip {
+    background: transparent;
+    color: var(--text);
+    border-color: var(--rule);
+  }
+  .ua-btn--chip[aria-pressed="true"] {
+    background: var(--chip);
+  }
+  .ua-btn--icon {
+    width: 44px;
+    padding: 0;
+  }
+  .ua-btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Menu atas */
+  .ua-nav a {
+    text-decoration: none;
+    color: var(--text-secondary);
+    padding: 12px 10px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .ua-nav a[aria-current="page"] {
+    color: var(--text);
+  }
+  .ua-nav a[aria-current="page"]:not(:has(.ua-nav-indicator)) {
+    box-shadow: inset 0 -2px 0 var(--text);
+  }
+
+  /* Tabs (garis bawah) */
+  .ua-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .ua-tabs button {
+    font-family: var(--font-sans);
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    min-height: 44px;
+    padding: 0;
+    margin-bottom: -1px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+  }
+  .ua-tabs button[aria-pressed="true"] {
+    color: var(--text);
+    border-bottom-color: var(--text);
+  }
+  .ua-tabs button:hover {
+    color: var(--text);
+  }
+
+  /* Metric */
+  .ua-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+    gap: 36px 40px;
+  }
+  .ua-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-top: 2px solid var(--text);
+    padding-top: 16px;
+  }
+  .ua-metric__title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .ua-metric__help {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    min-height: 39px;
+  }
+  .ua-metric__row {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .ua-metric__value {
+    font-size: 44px;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+  }
+  .ua-metric__compare {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .ua-bar {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--track);
+    overflow: hidden;
+  }
+  .ua-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+  }
+  .ua-bar--1 > span {
+    background: var(--series-1);
+  }
+  .ua-bar--2 > span {
+    background: var(--series-2);
+  }
+
+  /* Badge kategori ISPU */
+  .ua-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .ua-badge::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+  .ua-badge--baik {
+    background: var(--ispu-baik-bg);
+    color: var(--ispu-baik-fg);
+  }
+  .ua-badge--baik::before {
+    background: var(--ispu-baik);
+  }
+  .ua-badge--sedang {
+    background: var(--ispu-sedang-bg);
+    color: var(--ispu-sedang-fg);
+  }
+  .ua-badge--sedang::before {
+    background: var(--ispu-sedang);
+  }
+  .ua-badge--tidak-sehat {
+    background: var(--ispu-tidak-sehat-bg);
+    color: var(--ispu-tidak-sehat-fg);
+  }
+  .ua-badge--tidak-sehat::before {
+    background: var(--ispu-tidak-sehat);
+  }
+  .ua-badge--sangat-tidak-sehat {
+    background: var(--ispu-sangat-tidak-sehat-bg);
+    color: var(--ispu-sangat-tidak-sehat-fg);
+  }
+  .ua-badge--sangat-tidak-sehat::before {
+    background: var(--ispu-sangat-tidak-sehat);
+  }
+  .ua-badge--berbahaya {
+    background: var(--ispu-berbahaya-bg);
+    color: var(--ispu-berbahaya-fg);
+  }
+  .ua-badge--berbahaya::before {
+    background: currentColor;
+  }
+
+  /* DataTable */
+  .ua-table-wrap {
+    overflow-x: auto;
+  }
+  .ua-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+  }
+  .ua-table caption {
+    text-align: left;
+    font-size: 13px;
+    color: var(--text-muted);
+    padding-bottom: 10px;
+  }
+  .ua-table th[scope="col"] {
+    text-align: right;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 10px 0 10px 16px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .ua-table th[scope="col"]:first-child {
+    text-align: left;
+    padding-left: 0;
+  }
+  .ua-table th[scope="row"] {
+    text-align: left;
+    font-weight: 600;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .ua-table td {
+    text-align: right;
+    padding: 13px 0 13px 16px;
+    border-bottom: 1px solid var(--rule-soft);
+    color: var(--text-secondary);
+  }
+  .ua-best-1,
+  .ua-best-2 {
+    font-weight: 800;
+    color: var(--text);
+  }
+  .ua-best-1 {
+    box-shadow: inset 0 -2px 0 var(--series-1);
+  }
+  .ua-best-2 {
+    box-shadow: inset 0 -2px 0 var(--series-2);
+  }
+
+  /* Callout */
+  .ua-callout {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    background: var(--panel);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
+  .ua-callout > svg {
+    flex: none;
+    color: var(--warning);
+    margin-top: 1px;
+  }
+  .ua-callout strong {
+    font-weight: 800;
+    color: var(--text);
+  }
+
+  /* Slider */
+  .ua-slider {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .ua-slider__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .ua-slider label {
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .ua-slider output {
+    font-size: 20px;
+    font-weight: 800;
+  }
+  .ua-slider input[type="range"] {
+    width: 100%;
+    height: 32px;
+    margin: 0;
+    accent-color: var(--series-1);
+    cursor: pointer;
+  }
+  .ua-slider__hint {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* Select */
+  .ua-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .ua-select {
+    font-family: var(--font-sans);
+    min-height: 44px;
+    min-width: 160px;
+    padding: 0 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--rule);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  /* Ilustrasi */
+  .ua-ill {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: hidden;
+  }
+  .ua-ill .ua-l {
+    fill: var(--bg);
+    stroke: var(--ill-line);
+    stroke-width: 1.1;
+    stroke-linejoin: round;
+  }
+  .ua-ill .ua-stroke {
+    fill: none;
+    stroke: var(--ill-line);
+    stroke-width: 1.1;
+    stroke-linecap: round;
+  }
+  .ua-ill .ua-haze-lines {
+    stroke: var(--ill-haze);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-dasharray: 1 11;
+  }
+  .ua-ill .ua-gold {
+    fill: var(--ill-flame);
+  }
+
+  /* Gerak */
+  @keyframes ua-drift {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-12px);
+    }
+  }
+  @keyframes ua-float {
+    0% {
+      transform: translateX(0);
+    }
+    50% {
+      transform: translateX(40px);
+    }
+    100% {
+      transform: translateX(0);
+    }
+  }
+  @keyframes ua-drive {
+    from {
+      transform: translateX(-140px);
+    }
+    to {
+      transform: translateX(1260px);
+    }
+  }
+  @keyframes ua-flicker {
+    0% {
+      transform: scale(1, 1);
+    }
+    50% {
+      transform: scale(0.97, 1.04);
+    }
+    100% {
+      transform: scale(1.02, 0.98);
+    }
+  }
+  @keyframes ua-pulse {
+    0% {
+      transform: scale(0.6);
+      opacity: 0.6;
+    }
+    100% {
+      transform: scale(2);
+      opacity: 0;
+    }
+  }
+  @keyframes ua-fly {
+    0% {
+      transform: translate(0, 0);
+    }
+    50% {
+      transform: translate(40px, -5px);
+    }
+    100% {
+      transform: translate(80px, 0);
+    }
+  }
+  @keyframes ua-grow {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+  @keyframes ua-rise {
+    0% {
+      transform: translateY(0);
+      opacity: 0;
+    }
+    15% {
+      opacity: 1;
+    }
+    85% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(-46px);
+      opacity: 0;
+    }
+  }
+  @keyframes ua-train {
+    from {
+      transform: translateX(1220px);
+    }
+    to {
+      transform: translateX(-180px);
+    }
+  }
+
+  .ua-anim-haze {
+    animation: ua-drift 14s linear infinite;
+  }
+  .ua-anim-cloud {
+    animation: ua-float 110s ease-in-out infinite;
+  }
+  .ua-anim-cloud-slow {
+    animation: ua-float 150s ease-in-out infinite reverse;
+  }
+  .ua-anim-birds {
+    animation: ua-fly 40s ease-in-out infinite alternate;
+  }
+  .ua-anim-bus {
+    animation: ua-drive 55s linear infinite;
+  }
+  .ua-anim-flame {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: ua-flicker 3.2s ease-in-out infinite alternate;
+  }
+  .ua-anim-pulse {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: ua-pulse 3.6s ease-out infinite;
+  }
+  .ua-anim-grow {
+    transform-box: fill-box;
+    transform-origin: 0 50%;
+    animation: ua-grow 900ms var(--ua-spring) both;
+  }
+  .ua-bar > span.ua-anim-grow {
+    transform-origin: 0 50%;
+  }
+  .ua-anim-rise {
+    animation: ua-rise 6s ease-in-out infinite;
+  }
+  .ua-anim-train {
+    animation: ua-train 48s linear infinite;
+  }
+
+  /* Transisi antarhalaman dan antartampilan */
+  :root {
+    --ua-dur-press: 120ms; /* tombol ditekan */
+    --ua-dur-fast: 220ms; /* halaman lama keluar, hover */
+    --ua-dur-base: 520ms; /* halaman baru masuk, ganti tab */
+    --ua-dur-slow: 640ms; /* garis menu meluncur, bar berubah nilai */
+    --ua-stagger: 50ms; /* jeda antar lapisan halaman baru */
+    /* Pegas tanpa pantulan (critically damped), mirip rasa animasi sistem Apple */
+    --ua-spring: cubic-bezier(0.32, 0.72, 0, 1);
+    --ua-ease-in: cubic-bezier(0.4, 0, 0.6, 0.2);
+  }
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root {
+      --ua-spring: linear(
+        0,
+        0.057,
+        0.179,
+        0.32,
+        0.454,
+        0.572,
+        0.67,
+        0.749,
+        0.811,
+        0.86,
+        0.896,
+        0.924,
+        0.945,
+        0.96,
+        0.971,
+        0.98,
+        0.986,
+        0.99,
+        0.993,
+        0.995,
+        0.997,
+        0.998,
+        0.999,
+        1,
+        1
+      );
+    }
+  }
+
+  /* 1. Website banyak halaman (HTML biasa, Flask, Laravel): aktif otomatis di peramban yang mendukung */
+  @view-transition {
+    navigation: auto;
+  }
+  .ua-nav-bar {
+    view-transition-name: ua-nav;
+  }
+  ::view-transition-group(ua-nav) {
+    animation: none;
+  }
+  ::view-transition-old(root) {
+    animation: ua-page-out var(--ua-dur-fast) var(--ua-ease-in) both;
+  }
+  ::view-transition-new(root) {
+    animation: ua-page-in var(--ua-dur-base) var(--ua-spring) both;
+  }
+
+  /* Garis menu aktif meluncur dari menu lama ke menu baru */
+  .ua-nav-indicator {
+    view-transition-name: ua-nav-indicator;
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--text);
+  }
+  ::view-transition-group(ua-nav-indicator) {
+    animation-duration: var(--ua-dur-slow);
+    animation-timing-function: var(--ua-spring);
+  }
+
+  @keyframes ua-page-out {
+    to {
+      opacity: 0;
+      transform: scale(0.99);
+      filter: blur(4px);
+    }
+  }
+  @keyframes ua-page-in {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.985);
+      filter: blur(8px);
+    }
+  }
+  @keyframes ua-swap-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+      filter: blur(4px);
+    }
+  }
+
+  /* 2. Cadangan dan aplikasi satu halaman: pasang di lapisan halaman yang baru tampil */
+  .ua-enter {
+    animation: ua-page-in var(--ua-dur-base) var(--ua-spring) both;
+  }
+  .ua-enter-2 {
+    animation-delay: var(--ua-stagger);
+  }
+  .ua-enter-3 {
+    animation-delay: calc(var(--ua-stagger) * 2);
+  }
+
+  /* 3. Ganti tab atau filter di dalam halaman */
+  .ua-swap {
+    animation: ua-swap-in var(--ua-dur-base) var(--ua-spring) both;
+  }
+
+  /* Interaksi kecil */
+  .ua-nav a {
+    position: relative;
+    transition: color var(--ua-dur-fast) var(--ua-spring);
+  }
+  .ua-nav a:hover {
+    color: var(--text);
+  }
+  .ua-btn,
+  .ua-tabs button {
+    transition:
+      transform var(--ua-dur-base) var(--ua-spring),
+      background-color var(--ua-dur-fast) var(--ua-spring),
+      color var(--ua-dur-fast) var(--ua-spring),
+      border-color var(--ua-dur-fast) var(--ua-spring);
+  }
+  .ua-btn:active,
+  .ua-tabs button:active {
+    transform: scale(0.97);
+    transition-duration: var(--ua-dur-press);
+  }
+  .ua-bar > span,
+  .ua-transition-width {
+    transition: width var(--ua-dur-slow) var(--ua-spring);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+      animation: none !important;
+    }
+    .ua-enter,
+    .ua-swap {
+      animation: none !important;
+    }
+    .ua-nav a,
+    .ua-btn,
+    .ua-tabs button,
+    .ua-bar > span,
+    .ua-transition-width {
+      transition: none !important;
+    }
+    .ua-btn:active,
+    .ua-tabs button:active {
+      transform: none;
+    }
+    [class*="ua-anim-"] {
+      animation: none !important;
+    }
+    .ua-anim-bus {
+      transform: translateX(640px);
+    }
+    .ua-anim-pulse {
+      opacity: 0;
+    }
+    .ua-anim-train {
+      transform: translateX(420px);
+    }
+  }
+}
