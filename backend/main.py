@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import os
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from ml_pipeline import CLEAN_NUM_FEATURES, CAT_FEATURES, DashboardArtifacts, build_artifacts
@@ -185,3 +188,102 @@ def simulate(req: SimulateRequest) -> dict[str, Any]:
             pred_traj, pred_val, float(req.peak_value_eur), float(req.age)
         ),
     }
+
+
+def _resolve_data_dir() -> Path:
+    candidates = [
+        Path(os.environ.get("DATA_DIR", "/app/data")),
+        Path("/app/data"),
+        Path("/opt/sport-dashboard/data/Football_Player_Market_Value_Trajectories"),
+    ]
+    for p in candidates:
+        if (p / "transfermarkt_player_values.csv").exists():
+            return p
+    raise FileNotFoundError("Dataset directory not found")
+
+
+DATASET_CATALOG: dict[str, dict[str, Any]] = {
+    "transfermarkt_player_values.csv": {
+        "label": "Player Market Values (CSV)",
+        "description": "Dataset utama 508 pemain dari 5 liga top Eropa beserta 36 kolom fitur karier & target trajectory.",
+        "format": "CSV",
+        "media_type": "text/csv; charset=utf-8",
+    },
+    "transfermarkt_value_history.csv": {
+        "label": "Historical Valuations (CSV)",
+        "description": "9.764 titik riwayat valuasi pasar per pemain lengkap dengan tanggal, klub, dan usia.",
+        "format": "CSV",
+        "media_type": "text/csv; charset=utf-8",
+    },
+    "data_dictionary.csv": {
+        "label": "Data Dictionary (CSV)",
+        "description": "Definisi lengkap seluruh kolom dan tipe data pada dataset Transfermarkt.",
+        "format": "CSV",
+        "media_type": "text/csv; charset=utf-8",
+    },
+    "transfermarkt_player_values.parquet": {
+        "label": "Player Market Values (Parquet)",
+        "description": "Format biner Apache Parquet yang terkompresi untuk analitik cepat di Python/Spark.",
+        "format": "Parquet",
+        "media_type": "application/octet-stream",
+    },
+}
+
+
+@app.get("/api/datasets")
+def list_datasets() -> dict[str, Any]:
+    art = _get_artifacts()
+    data_dir = _resolve_data_dir()
+    files: list[dict[str, Any]] = []
+    for fname, meta in DATASET_CATALOG.items():
+        fpath = data_dir / fname
+        if not fpath.exists():
+            continue
+        rows = art.total_players if "player_values" in fname else (art.history_rows if "history" in fname else 34)
+        cols = 36 if "player_values" in fname else (8 if "history" in fname else 3)
+        files.append(
+            {
+                "filename": fname,
+                "label": meta["label"],
+                "description": meta["description"],
+                "format": meta["format"],
+                "size_bytes": fpath.stat().st_size,
+                "rows": rows,
+                "columns": cols,
+                "download_url": f"/api/datasets/download/{fname}",
+            }
+        )
+
+    df = art.players_df.sort_values("current_value_eur", ascending=False)
+    records = [
+        {
+            "player_id": str(r["player_id"]),
+            "name": str(r["name"]),
+            "age": None if pd.isna(r["age"]) else int(r["age"]),
+            "nationality": str(r["nationality_clean"]),
+            "league_name": str(r["league_name"]),
+            "peak_club": str(r["peak_club"]) if pd.notna(r["peak_club"]) else "Unknown",
+            "current_value_eur": float(r["current_value_eur"]),
+            "peak_value_eur": float(r["peak_value_eur"]),
+            "first_value_eur": float(r["first_value_eur"]) if pd.notna(r["first_value_eur"]) else 0.0,
+            "career_span_years": float(r["career_span_years"]) if pd.notna(r["career_span_years"]) else 0.0,
+            "num_valuation_points": int(r["num_valuation_points"]) if pd.notna(r["num_valuation_points"]) else 0,
+            "trajectory": str(r["trajectory"]),
+        }
+        for _, r in df.iterrows()
+    ]
+    return {"files": files, "total_players": len(records), "players": records}
+
+
+@app.get("/api/datasets/download/{filename}")
+def download_dataset(filename: str) -> FileResponse:
+    if filename not in DATASET_CATALOG:
+        raise HTTPException(status_code=404, detail="Dataset file not found")
+    fpath = _resolve_data_dir() / filename
+    if not fpath.exists():
+        raise HTTPException(status_code=404, detail="Dataset file missing on disk")
+    return FileResponse(
+        path=fpath,
+        filename=filename,
+        media_type=DATASET_CATALOG[filename]["media_type"],
+    )

@@ -153,3 +153,35 @@ export function useApi<T>(path: string, enabled = true) {
     enabled,
   });
 }
+
+export interface DatasetFileMeta {
+  filename: string;
+  label: string;
+  description: string;
+  format: string;
+  size_bytes: number;
+  rows: number;
+  columns: number;
+  download_url: string;
+}
+
+export interface DatasetPlayerRow {
+  player_id: string;
+  name: string;
+  age: number | null;
+  nationality: string;
+  league_name: string;
+  peak_club: string;
+  current_value_eur: number;
+  peak_value_eur: number;
+  first_value_eur: number;
+  career_span_years: number;
+  num_valuation_points: number;
+  trajectory: TrajectoryClass;
+}
+
+export interface DatasetsResponse {
+  files: DatasetFileMeta[];
+  total_players: number;
+  players: DatasetPlayerRow[];
+}

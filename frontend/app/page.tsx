@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { LogoMark } from "@/components/logo-mark";
 import { ArenaPanel } from "@/components/panels/ArenaPanel";
+import { DatasetPanel } from "@/components/panels/DatasetPanel";
 import { DiagnosticsPanel } from "@/components/panels/DiagnosticsPanel";
 import { ErrorAnalysisPanel } from "@/components/panels/ErrorAnalysisPanel";
 import { RecommendationsPanel } from "@/components/panels/RecommendationsPanel";
@@ -18,6 +19,7 @@ const TABS = [
   { id: "history", label: "Tren Karir" },
   { id: "simulator", label: "Scouting Simulator" },
   { id: "recommendations", label: "Rekomendasi Klub" },
+  { id: "datasets", label: "Dataset Total" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -82,6 +84,7 @@ export default function DashboardPage() {
             {tab === "history" && <TrajectoryExplorerPanel />}
             {tab === "simulator" && <ScoutingSimulatorPanel />}
             {tab === "recommendations" && <RecommendationsPanel preds={preds.data} />}
+            {tab === "datasets" && <DatasetPanel />}
           </>
         )}
       </main>
