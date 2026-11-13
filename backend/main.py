@@ -148,9 +148,25 @@ def simulate(req: SimulateRequest) -> dict[str, Any]:
     nat = req.nationality.strip()
     nat_grouped = nat if nat in art.top_nationalities else "Other"
 
+    age_past_peak = float(req.age) - float(req.age_at_peak)
+    years_past_peak = max(0.0, float(req.career_span_years) - float(req.years_to_peak))
+    # Approximate pre-current lag state from profile parameters
+    decay_factor = max(0.25, 1.0 - 0.12 * max(0.0, age_past_peak))
+    pre_last = float(req.peak_value_eur) * decay_factor if age_past_peak > 0.5 else float(req.peak_value_eur) * 0.92
+    pre_prev = pre_last * (0.95 if age_past_peak <= 0.5 else 1.05)
+    pre_peak = float(req.peak_value_eur)
+    pre_drawdown = max(0.0, (pre_peak - pre_last) / max(pre_peak, 1.0))
+    pre_mom1 = (pre_last - pre_prev) / max(pre_prev, 1.0)
+    pre_mom2 = (pre_last - float(req.first_value_eur)) / max(float(req.first_value_eur), 1.0) * 0.25
+    pre_mult = pre_last / max(float(req.first_value_eur), 1.0)
+    is_pre_peak = 1 if pre_last >= pre_peak * 0.95 else 0
+    pre_slope = (pre_last - float(req.first_value_eur)) / max(float(req.num_valuation_points), 2) / max(pre_peak, 1.0)
+
     row_dict = {
         "age": float(req.age),
         "age_at_peak": float(req.age_at_peak),
+        "age_past_peak": age_past_peak,
+        "years_past_peak": years_past_peak,
         "peak_value_eur": float(req.peak_value_eur),
         "first_value_eur": float(req.first_value_eur),
         "career_span_years": float(req.career_span_years),
@@ -161,6 +177,15 @@ def simulate(req: SimulateRequest) -> dict[str, Any]:
         "ever_100m": int(req.peak_value_eur >= 100_000_000),
         "ever_50m": int(req.peak_value_eur >= 50_000_000),
         "ever_10m": int(req.peak_value_eur >= 10_000_000),
+        "pre_last_value_eur": pre_last,
+        "pre_prev_value_eur": pre_prev,
+        "pre_peak_value_eur": pre_peak,
+        "pre_drawdown_pct": pre_drawdown,
+        "pre_mom1": pre_mom1,
+        "pre_mom2": pre_mom2,
+        "pre_multiplier": pre_mult,
+        "is_pre_peak": is_pre_peak,
+        "pre_slope": pre_slope,
         "league_name": req.league_name.strip(),
         "nationality": nat_grouped,
     }

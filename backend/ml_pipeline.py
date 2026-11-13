@@ -43,6 +43,8 @@ CLASSES: list[str] = [
 CLEAN_NUM_FEATURES: list[str] = [
     "age",
     "age_at_peak",
+    "age_past_peak",
+    "years_past_peak",
     "peak_value_eur",
     "first_value_eur",
     "career_span_years",
@@ -53,6 +55,15 @@ CLEAN_NUM_FEATURES: list[str] = [
     "ever_100m",
     "ever_50m",
     "ever_10m",
+    "pre_last_value_eur",
+    "pre_prev_value_eur",
+    "pre_peak_value_eur",
+    "pre_drawdown_pct",
+    "pre_mom1",
+    "pre_mom2",
+    "pre_multiplier",
+    "is_pre_peak",
+    "pre_slope",
 ]
 
 LEAKAGE_EXTRA_NUM_FEATURES: list[str] = [
@@ -161,9 +172,9 @@ def _evaluate_classifiers(
     num_features: list[str],
 ) -> tuple[dict[str, Any], dict[str, Pipeline], dict[str, np.ndarray]]:
     specs = [
-        ("Random Forest", RandomForestClassifier(n_estimators=200, random_state=42)),
-        ("Gradient Boosting", GradientBoostingClassifier(n_estimators=150, random_state=42)),
-        ("Logistic Regression", LogisticRegression(max_iter=2000, random_state=42)),
+        ("Random Forest", RandomForestClassifier(n_estimators=400, random_state=42)),
+        ("Gradient Boosting", GradientBoostingClassifier(n_estimators=200, max_depth=3, random_state=42)),
+        ("Logistic Regression", LogisticRegression(max_iter=2000, C=2.0, random_state=42)),
     ]
 
     models_out: list[dict[str, Any]] = []
@@ -275,6 +286,52 @@ def build_artifacts() -> DashboardArtifacts:
     # Normalize player_id as string for consistent lookup
     df["player_id"] = df["player_id"].astype(str)
     hist_df["player_id"] = hist_df["player_id"].astype(str)
+
+    # Engineer strictly pre-current lag features from history (excluding final valuation v[-1])
+    hist_sorted = hist_df.copy()
+    hist_sorted["_dt"] = pd.to_datetime(hist_sorted["valuation_date"], dayfirst=True, errors="coerce")
+    hist_sorted = hist_sorted.sort_values(["player_id", "_dt"])
+    lag_feats: dict[str, dict[str, float]] = {}
+    for pid, grp in hist_sorted.groupby("player_id"):
+        vals = grp["value_eur"].astype(float).values
+        pre = vals[:-1] if len(vals) > 1 else vals
+        p1 = float(pre[-1]) if len(pre) >= 1 else 0.0
+        p2 = float(pre[-2]) if len(pre) >= 2 else p1
+        p3 = float(pre[-3]) if len(pre) >= 3 else p2
+        p_peak = float(np.max(pre)) if len(pre) else 0.0
+        p_first = float(pre[0]) if len(pre) else 0.0
+        slope = (
+            float(np.polyfit(np.arange(len(pre), dtype=float), pre, 1)[0]) / max(p_peak, 1.0)
+            if len(pre) >= 2
+            else 0.0
+        )
+        lag_feats[str(pid)] = {
+            "pre_last_value_eur": p1,
+            "pre_prev_value_eur": p2,
+            "pre_peak_value_eur": p_peak,
+            "pre_drawdown_pct": (p_peak - p1) / max(p_peak, 1.0),
+            "pre_mom1": (p1 - p2) / max(p2, 1.0),
+            "pre_mom2": (p1 - p3) / max(p3, 1.0),
+            "pre_multiplier": p1 / max(p_first, 1.0),
+            "is_pre_peak": float(int(p1 >= p_peak * 0.999)) if p_peak > 0 else 0.0,
+            "pre_slope": slope,
+        }
+
+    for col in [
+        "pre_last_value_eur",
+        "pre_prev_value_eur",
+        "pre_peak_value_eur",
+        "pre_drawdown_pct",
+        "pre_mom1",
+        "pre_mom2",
+        "pre_multiplier",
+        "is_pre_peak",
+        "pre_slope",
+    ]:
+        df[col] = df["player_id"].map(lambda pid, c=col: lag_feats.get(pid, {}).get(c, 0.0))
+
+    df["age_past_peak"] = df["age"].astype(float) - df["age_at_peak"].astype(float)
+    df["years_past_peak"] = df["career_span_years"].astype(float) - df["years_to_peak"].astype(float)
 
     # Top N nationalities (excluding missing)
     nat_series = df["nationality"].fillna("").astype(str).str.strip()
