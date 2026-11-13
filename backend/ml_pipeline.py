@@ -15,7 +15,10 @@ from __future__ import annotations
 
 import hashlib
 import os
+import json
+import platform
 import time
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -49,6 +52,7 @@ from sklearn.model_selection import GroupKFold, GroupShuffleSplit, train_test_sp
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 
+import evaluation as ev
 from features import (
     CAT_FEATURES,
     CLASSES,
@@ -321,6 +325,33 @@ def fit_outlook(train: pd.DataFrame) -> OutlookModel:
     return OutlookModel(clf=clf, reg=reg, ci=ci)
 
 
+def explain_outlook(
+    model: OutlookModel, row: pd.DataFrame, background: pd.DataFrame, targets: tuple[str, ...]
+) -> dict[str, Any]:
+    """Group-replacement explanation of one player's outlook (see evaluation.explain_row)."""
+    idx = {c: k for k, c in enumerate(model.clf.classes_)}
+    fns: dict[str, Callable[[pd.DataFrame], np.ndarray]] = {
+        "p_up": lambda X: model.clf.predict_proba(X[FORECAST_COLS])[:, idx["up"]],
+        "p_down": lambda X: model.clf.predict_proba(X[FORECAST_COLS])[:, idx["down"]],
+        "expected_log_return": lambda X: model.reg.predict_log(X[FORECAST_COLS])
+        - X["log_last"].to_numpy(dtype=float),
+    }
+    x = row[FORECAST_COLS].reset_index(drop=True)
+    out: dict[str, Any] = {}
+    for target in targets:
+        exp = ev.explain_row(fns[target], x, background)
+        for c in exp["contributions"]:
+            value = row.iloc[0].get(ev.GROUP_KEY_FEATURE[c["group"]])
+            c["key_feature"] = ev.GROUP_KEY_FEATURE[c["group"]]
+            c["key_value"] = (
+                None
+                if value is None or (isinstance(value, float) and np.isnan(value))
+                else (round(float(value), 4) if isinstance(value, (int, float, np.floating)) else str(value))
+            )
+        out[target] = exp
+    return out
+
+
 def outlook_signal(p_up: float, p_down: float) -> str:
     if p_up >= OUTLOOK_THRESHOLD:
         return "Buy"
@@ -338,7 +369,8 @@ def validate_outlook(history: pd.DataFrame) -> dict[str, Any]:
     recent = history[history["date"] >= OUTLOOK_START]
     train = recent[recent["target_date"] < OUTLOOK_OOT_CUTOFF]
     test = recent[recent["date"] >= OUTLOOK_OOT_CUTOFF]
-    pred = fit_outlook(train).predict(test)
+    model = fit_outlook(train)
+    pred = model.predict(test)
     current = test["last_value_eur"].to_numpy()
     actual = test["target_value"].to_numpy()
     direction = test["direction"].to_numpy()
@@ -353,7 +385,27 @@ def validate_outlook(history: pd.DataFrame) -> dict[str, Any]:
     )
     share = lambda mask, cls: round(float((direction[mask] == cls).mean()), 4) if mask.any() else None
     med = lambda mask: round(float(np.median(np.log(actual[mask] / current[mask]))), 4) if mask.any() else None
+    p_up, p_down = pred["p_up"].to_numpy(), pred["p_down"].to_numpy()
+    pred_return = np.log(pred["value"].to_numpy() / current)
+    evaluation = {
+        "deciles": ev.decile_table(pred_return, test["log_return"].to_numpy()),
+        "threshold_sweep": ev.threshold_sweep(direction[liquid], p_up[liquid], p_down[liquid]),
+        "calibration": {
+            "p_up": ev.reliability_bins(p_up[liquid], direction[liquid] == "up"),
+            "p_down": ev.reliability_bins(p_down[liquid], direction[liquid] == "down"),
+        },
+        "by_age": ev.direction_by_segment(
+            ev.age_bucket(test["age_last"].to_numpy())[liquid],
+            direction[liquid], p_up[liquid], p_down[liquid], OUTLOOK_THRESHOLD,
+        ),
+        "by_value_tier": ev.direction_by_segment(
+            ev.value_tier(current)[liquid],
+            direction[liquid], p_up[liquid], p_down[liquid], OUTLOOK_THRESHOLD,
+        ),
+        "feature_importance": _reg_importance(model.reg, test[FORECAST_COLS], actual),
+    }
     return {
+        **evaluation,
         "cutoff": OUTLOOK_OOT_CUTOFF,
         "train_rows": int(len(train)),
         "test_rows": int(len(test)),
@@ -1016,6 +1068,7 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
                 reg_best[task] = est
                 reg_pred[task] = est.predict(test[cols])
         ci = fit_conformal(task, cols, fit_df, cal_df)
+        tier_lo, tier_hi = ci.interval(test[cols])
         reg_ci[task] = ci
         reg_tasks[task] = {
             "models": rows,
@@ -1029,6 +1082,7 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
             "intervals": {
                 "method": "CQR (conformalized quantile regression) on the log scale",
                 "holdout": interval_report(ci, test[cols], y_test),
+                "coverage_by_value_tier": ev.coverage_by_tier(y_test, tier_lo, tier_hi),
                 "q_hat_log": round(ci.q_hat, 4),
                 "n_calibration": ci.n_calibration,
             },
@@ -1037,6 +1091,76 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
 
     # Naive persistence scored next to the fundamental/profile models: the anti-tautology number.
     naive = reg_metrics(y_test, np.expm1(test["log_last"].to_numpy()))
+    naive_top = reg_tasks["forecast"]["validation"]["holdout_value_ge_50m"]["Naive (last value)"]
+    for task, block in reg_tasks.items():
+        best_name = block["best_model"]
+        block["headline"] = ev.regression_headline(
+            best_name,
+            next(m for m in block["models"] if m["name"] == best_name),
+            naive,
+            block["validation"]["holdout_value_ge_50m"][best_name],
+            naive_top,
+        )
+
+    # ---- leak audit of the CSV summary columns -----------------------------------------
+    csv = df.set_index("player_id")
+    prior_peak = pd.Series({pid: float(s.values[:-1].max()) for pid, s in series.items()})
+    exposed = csv["peak_value_eur"].astype(float) > prior_peak.reindex(csv.index)
+    summary_cols = ["peak_value_eur", "years_to_peak", "career_span_years", "value_volatility"]
+    contaminated = csv[summary_cols].astype(float).add_prefix("csv_")
+    audit_train = train[train["is_final"]].join(contaminated, on="player_id")
+    audit_test = test.join(contaminated, on="player_id")
+    audit_scores = {}
+    for tag, extra_cols in (("without", []), ("with", list(contaminated.columns))):
+        audit_cols = FORECAST_NUM_FEATURES + extra_cols + CAT_FEATURES
+        est = _hgb_clf(FORECAST_NUM_FEATURES + extra_cols, CAT_FEATURES).fit(
+            audit_train[audit_cols], audit_train["label"]
+        )
+        m = clf_metrics(proba_in_order(est, audit_test[audit_cols]), audit_test["label"])
+        audit_scores[tag] = {k: m[k] for k in ("accuracy", "macro_f1", "log_loss")}
+    previous_path = Path(__file__).resolve().parent / "reports" / "before_metrics.json"
+    previous = json.loads(previous_path.read_text()) if previous_path.exists() else None
+    leak_audit = {
+        "finding": (
+            "CSV summary columns are computed over the full history, target valuation included. "
+            "They look like harmless career statistics but reveal the label and the target value."
+        ),
+        "rule": "peak_value_eur (CSV) > highest valuation before the target  =>  rising_star",
+        "rule_accuracy": round(
+            float((exposed == (csv["trajectory"] == "rising_star")).mean()), 4
+        ),
+        "share_players_target_exposed": round(float(exposed.mean()), 4),
+        "target_equals_csv_peak_when_exposed": round(
+            float(
+                (csv.loc[exposed, "peak_value_eur"] == csv.loc[exposed, "current_value_eur"]).mean()
+            ),
+            4,
+        ),
+        "contamination_test": {
+            "description": (
+                "Same classifier and same rows, with and without four CSV summary columns "
+                "as extra features."
+            ),
+            "columns_added": summary_cols,
+            "without_csv_columns": audit_scores["without"],
+            "with_csv_columns": audit_scores["with"],
+            "accuracy_inflation_pp": round(
+                (audit_scores["with"]["accuracy"] - audit_scores["without"]["accuracy"]) * 100, 2
+            ),
+        },
+        "previous_pipeline": None
+        if previous is None
+        else {
+            "commit": "c8eade6",
+            "reported_clean_classifier": previous["pipeline_clean_clf"],
+            "reported_regression": previous["pipeline_reg"],
+            "simulate_endpoint_classifier": previous["simulate_path_clf"],
+            "simulate_endpoint_regression": previous["simulate_path_reg"],
+            "simulate_range_coverage": previous["simulate_path_range_coverage"],
+            "simulate_vs_pipeline_agreement": previous["simulate_vs_pipeline_agreement"],
+        },
+    }
+    log(f"leak audit done ({time.time() - t0:.0f}s)")
     for task in ("fundamental", "profile"):
         reg_tasks[task]["reference_naive_last_value"] = naive
     # How much of the *latest price* can the fundamental features reconstruct?
@@ -1255,6 +1379,29 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
                 else "Neutral",
             }
         )
+    explain_background = (
+        outlook_hist[outlook_hist["date"] >= "2023-01-01"][FORECAST_COLS]
+        .sample(n=150, random_state=SEED)
+        .reset_index(drop=True)
+    )
+    outlook_buy = sorted(
+        [r for r in outlook_rows if r["signal"] == "Buy"],
+        key=lambda r: r["expected_change_eur"],
+        reverse=True,
+    )[:30]
+    outlook_risk = sorted(
+        [r for r in outlook_rows if r["signal"] == "DepreciationRisk"],
+        key=lambda r: r["expected_change_eur"],
+    )[:30]
+    cur_by_pid = outlook_cur.set_index("player_id", drop=False)
+    for listed, target in ((outlook_buy, "p_up"), (outlook_risk, "p_down")):
+        for r in listed:
+            exp = explain_outlook(
+                outlook_model, cur_by_pid.loc[[r["player_id"]]], explain_background, (target,)
+            )[target]
+            r["reasons"] = [c for c in exp["contributions"] if c["contribution"] > 0][:3]
+    log(f"outlook explanations done ({time.time() - t0:.0f}s)")
+
     outlook_payload = {
         "method": (
             "Calibrated probability that the market value is more than 5% higher / lower at the "
@@ -1270,15 +1417,12 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
             s: sum(r["signal"] == s for r in outlook_rows)
             for s in ("Buy", "Neutral", "DepreciationRisk")
         },
-        "buy": sorted(
-            [r for r in outlook_rows if r["signal"] == "Buy"],
-            key=lambda r: r["expected_change_eur"],
-            reverse=True,
-        )[:30],
-        "depreciation_risk": sorted(
-            [r for r in outlook_rows if r["signal"] == "DepreciationRisk"],
-            key=lambda r: r["expected_change_eur"],
-        )[:30],
+        "buy": outlook_buy,
+        "depreciation_risk": outlook_risk,
+        "explanation_method": (
+            "reasons = feature groups that raise this player's probability most, measured by "
+            "swapping the group for the values of 150 typical players (one group at a time)."
+        ),
         "limits": [
             "Predicts Transfermarkt market value, not sporting quality or transfer fee.",
             "No performance, injury or contract data.",
@@ -1338,6 +1482,31 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
                 for lg, vals in sorted(league_groups.items())
             ],
             "league_bias_model": "forecast",
+            "segments_note": (
+                "Test players' last update. value_tier and age are known before the update. "
+                "bias_pct = median signed error, positive = over-prediction."
+            ),
+            "segments": ev.segment_report(
+                pd.DataFrame(
+                    {
+                        "actual": y_test,
+                        "forecast": reg_pred["forecast"],
+                        "naive": np.expm1(test["log_last"].to_numpy()),
+                        "fair": reg_pred["fundamental"],
+                        "label": test["label"].to_numpy(),
+                        "pred_label": pred_clean,
+                        "persistence_label": clf_models["Persistence (last state)"].predict(
+                            test[FORECAST_COLS]
+                        ),
+                    }
+                ),
+                {
+                    "value_tier": ev.value_tier(np.expm1(test["log_last"].to_numpy())),
+                    "age": ev.age_bucket(test["age_last"].to_numpy()),
+                    "position_group": test["position_group"].fillna("Unknown").to_numpy(),
+                    "league": test["league_name"].to_numpy(),
+                },
+            ),
         },
     }
 
@@ -1380,6 +1549,13 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
                 "best_model": best_clf,
                 "features": FORECAST_COLS,
                 "validation": {"group_kfold": clf_cv, "fixed_horizon": fixed_clf},
+                "calibration": ev.classifier_calibration(proba_test, test["label"]),
+                "headline": ev.classification_headline(
+                    best_clf,
+                    best_clean_row,
+                    next(m for m in clean_rows if m["name"].startswith("Persistence")),
+                    fixed_clf[best_clf],
+                ),
             },
             "leakage_mode": {"models": leak_rows, "best_model": best_leak},
             "profile_mode": {
@@ -1396,6 +1572,44 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
             "tasks": reg_tasks,
         },
         "out_of_time": oot_report,
+        "outlook": {
+            "task": "market value 10-16 months ahead (direction beyond 5%, value, range)",
+            "threshold": OUTLOOK_THRESHOLD,
+            "min_value_eur": OUTLOOK_MIN_VALUE,
+            "train_rows": int((outlook_hist["date"] >= OUTLOOK_START).sum()),
+            "validation": outlook_validation,
+        },
+        "leak_audit": leak_audit,
+        "data_card": {
+            "source": "Transfermarkt market values (original 508-player set + salimt/football-datasets)",
+            "players": int(len(df)),
+            "valuation_points": int(len(hist)),
+            "first_valuation": min(s.dates[0] for s in series.values()),
+            "data_as_of": max(s.dates[-1] for s in series.values()),
+            "dataset_built_at": sorted(df["dataset_built_at"].astype(str).unique().tolist()),
+            "players_by_source": df["data_source"].value_counts().to_dict(),
+            "population": "Players active in a top-5 European league in 2025 with a valuation since 2024.",
+            "unit": "Transfermarkt market value in EUR: a crowd/editor estimate, not a transfer fee.",
+            "label": "trajectory: rising_star = strict new all-time high; else drawdown from peak <20 / <30 / <60 / >=60 %.",
+            "repairs": repairs,
+            "known_gaps": [
+                "No performance, injury, contract or wage data.",
+                "Club history unusable for 1,910 players (single club recorded).",
+                "league_name and position are current values; past rows reuse them.",
+                "Survivorship: only players who were in a top-5 league in 2025.",
+                "16 legacy players without a position.",
+            ],
+            "intended_use": "Shortlisting and what-if exploration for scouts and analysts.",
+            "not_for": "Pricing a transfer, judging sporting quality, or decisions without a scout's review.",
+        },
+        "model_card": {
+            "version": _fingerprint(),
+            "trained_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "python": platform.python_version(),
+            "scikit_learn": sklearn.__version__,
+            "seed": SEED,
+            "tests": "backend/tests/test_pipeline.py (deploy/test.sh)",
+        },
     }
 
     history_by_player = {
@@ -1448,9 +1662,12 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
         extra={
             "outlook_model": outlook_model,
             "outlook_by_player": {r["player_id"]: r for r in outlook_rows},
+            "explain_background": explain_background,
         },
     )
     overview["methodology"]["training_seconds"] = round(time.time() - t0, 1)
+    overview["model_card"]["models"] = dict(art.model_names, outlook="HistGradientBoosting (calibrated)")
+    overview["model_card"]["training_seconds"] = overview["methodology"]["training_seconds"]
     log(f"training finished in {time.time() - t0:.0f}s")
     return art
 
@@ -1468,6 +1685,7 @@ def _fingerprint() -> str:
         players_path.parent / "player_profile_patch.csv",
         here / "features.py",
         here / "ml_pipeline.py",
+        here / "evaluation.py",
     ]
     for f in files:
         if f.exists():

@@ -12,13 +12,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, model_validator
 
-from features import DEFAULT_HORIZON_YR
+from features import CAT_FEATURES, DEFAULT_HORIZON_YR
 from ml_pipeline import (
     HORIZON_WARN_YR,
     INTERVAL_LEVEL,
     MAX_HORIZON_YR,
     DashboardArtifacts,
     build_artifacts,
+    explain_outlook,
     resolve_data_dir,
     player_feature_row,
     predict_feature_row,
@@ -88,6 +89,7 @@ class SimulateRequest(BaseModel):
 
     player_id: str | None = None
     scenario: Scenario | None = None
+    explain: bool = False  # player mode: add a per-player explanation of the 12-month outlook
 
     age: float | None = Field(None, ge=14, le=45)
     age_at_peak: float | None = Field(None, ge=14, le=45)
@@ -142,6 +144,9 @@ def health() -> dict[str, Any]:
         "status": "ok",
         "players": art.total_players,
         "history_rows": art.history_rows,
+        "model_version": art.overview["model_card"]["version"],
+        "trained_at": art.overview["model_card"]["trained_at"],
+        "data_as_of": art.overview["data_card"]["data_as_of"],
     }
 
 
@@ -272,6 +277,23 @@ def _simulate_player(art: DashboardArtifacts, req: SimulateRequest) -> dict[str,
     out.update(_gap(out["fair_value_eur"], meta["last_value_eur"], out["fair_value_range_eur"], row))
     if not sc.backtest and not appended and not league:
         out["outlook_12m"] = art.extra["outlook_by_player"].get(pid)
+        if req.explain:
+            outlook_row, _ = player_feature_row(art, pid, horizon_yr=1.0)
+            frame = pd.DataFrame([outlook_row])
+            for cat in CAT_FEATURES:
+                frame[cat] = frame[cat].astype(object).where(frame[cat].notna(), np.nan)
+            out["explanation"] = {
+                "method": (
+                    "contribution = prediction minus the average prediction when this feature "
+                    "group is swapped for the values of 150 typical players (one group at a time)."
+                ),
+                **explain_outlook(
+                    art.extra["outlook_model"],
+                    frame,
+                    art.extra["explain_background"],
+                    ("p_up", "p_down", "expected_log_return"),
+                ),
+            }
     if not sc.backtest and (appended or league or sc.horizon_years is not None):
         base_row, _ = player_feature_row(art, pid)
         base = predict_feature_row(art, base_row)

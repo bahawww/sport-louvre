@@ -486,3 +486,121 @@ def test_collapsed_prices_are_not_buy_recommendations(art):
         assert by_name[name]["signal"] != "Buy", by_name[name]
     buys = {r["name"] for r in art.test_predictions["outlook"]["buy"]}
     assert not buys & {"Ansu Fati", "Raheem Sterling"}
+
+
+# ----------------------------------------------------------------------------- report data
+
+
+def test_headlines_put_the_baseline_next_to_the_model(art):
+    o = art.overview
+    h = o["classification"]["clean_mode"]["headline"]
+    assert h["model"] == o["classification"]["clean_mode"]["best_model"]
+    assert h["gain_vs_persistence"]["accuracy_pp"] == pytest.approx(
+        (h["metrics"]["accuracy"] - h["persistence"]["accuracy"]) * 100, abs=0.01
+    )
+    for task in ("forecast", "fundamental", "profile"):
+        hd = o["regression"]["tasks"][task]["headline"]
+        assert {"metrics", "naive_last_value", "skill_vs_naive", "beats_naive_eur", "beats_naive_log", "value_ge_50m"} <= set(hd)
+    fc = o["regression"]["tasks"]["forecast"]["headline"]
+    assert fc["beats_naive_log"] == (fc["metrics"]["rmse_log"] < fc["naive_last_value"]["rmse_log"])
+    assert fc["beats_naive_eur"] == (
+        fc["metrics"]["mae"] < fc["naive_last_value"]["mae"] and fc["metrics"]["rmse"] < fc["naive_last_value"]["rmse"]
+    )
+    assert fc["value_ge_50m"]["n"] > 10
+
+
+def test_calibration_tables(art):
+    cal = art.overview["classification"]["clean_mode"]["calibration"]
+    assert sum(b["n"] for b in cal["top_label"]) == 484
+    assert set(cal["per_class"]) == set(CLASSES)
+    for bins in [cal["top_label"], *cal["per_class"].values()]:
+        for b in bins:
+            assert 0 <= b["predicted"] <= 1 and 0 <= b["observed"] <= 1 and b["lo"] <= b["predicted"] <= b["hi"] + 1e-9
+    for task in ("forecast", "fundamental", "profile"):
+        tiers = art.overview["regression"]["tasks"][task]["intervals"]["coverage_by_value_tier"]
+        assert sum(t["n"] for t in tiers) == 484
+
+
+def test_outlook_evaluation_tables(art):
+    v = art.overview["outlook"]["validation"]
+    assert len(v["deciles"]) == 10
+    assert v["deciles"][-1]["realised_median"] > v["deciles"][0]["realised_median"]
+    assert [t["threshold"] for t in v["threshold_sweep"]] == [0.5, 0.6, 0.7, 0.8]
+    sweep = {t["threshold"]: t for t in v["threshold_sweep"]}
+    assert sweep[0.7]["buy_n"] == v["buy"]["n"] and sweep[0.7]["buy_went_up"] == v["buy"]["went_up"]
+    assert v["calibration"]["p_up"] and v["calibration"]["p_down"]
+    assert v["by_age"] and v["by_value_tier"]
+    assert v["feature_importance"][0]["importance"] > 0
+
+
+def test_segment_error_tables(client):
+    seg = client.get("/api/test-predictions").json()["error_analysis"]["segments"]
+    assert set(seg) == {"value_tier", "age", "position_group", "league"}
+    assert sum(r["n"] for r in seg["value_tier"]) == 484
+    assert sum(r["n"] for r in seg["league"]) == 484
+    for rows in seg.values():
+        for r in rows:
+            assert {"segment", "n", "forecast", "naive", "fundamental", "accuracy", "persistence_accuracy"} <= set(r)
+            assert r["forecast_beats_naive_log"] == (r["forecast"]["rmse_log"] < r["naive"]["rmse_log"])
+
+
+def test_leak_audit_shows_the_csv_summary_leak(art):
+    a = art.overview["leak_audit"]
+    assert a["rule_accuracy"] == 1.0
+    assert a["target_equals_csv_peak_when_exposed"] == 1.0
+    assert 0.15 < a["share_players_target_exposed"] < 0.2
+    c = a["contamination_test"]
+    assert c["with_csv_columns"]["accuracy"] > c["without_csv_columns"]["accuracy"] + 0.05
+    assert c["accuracy_inflation_pp"] > 5
+    assert a["previous_pipeline"]["reported_clean_classifier"]["accuracy"] == pytest.approx(0.8512, abs=1e-3)
+
+
+def test_data_and_model_card(client, art):
+    o = client.get("/api/overview").json()
+    d, m = o["data_card"], o["model_card"]
+    assert d["players"] == 2418 and d["data_as_of"] >= "2026-01-01" and d["first_valuation"] < "2006-01-01"
+    assert d["known_gaps"] and d["intended_use"] and d["not_for"]
+    assert m["version"] == mp._fingerprint() and m["trained_at"] and m["scikit_learn"]
+    assert set(m["models"]) == {"classifier", "classifier_profile", "forecast", "fundamental", "profile", "outlook"}
+    h = client.get("/api/health").json()
+    assert h["model_version"] == m["version"] and h["data_as_of"] == d["data_as_of"]
+
+
+def test_feature_groups_cover_every_forecast_feature():
+    import evaluation as ev
+
+    ev.assert_groups_cover_features()
+    assert set(ev.GROUP_KEY_FEATURE) == set(ev.FEATURE_GROUPS)
+
+
+def test_explain_row_isolates_the_changed_group():
+    import evaluation as ev
+
+    rng = np.random.default_rng(0)
+    bg = pd.DataFrame({"a": rng.normal(size=200), "b": rng.normal(size=200), "c": rng.normal(size=200)})
+    row = pd.DataFrame({"a": [3.0], "b": [0.0], "c": [5.0]})
+    exp = ev.explain_row(lambda X: (2 * X["a"] + X["b"]).to_numpy(), row, bg, {"A": ["a"], "B": ["b"], "C": ["c"]})
+    by = {c["group"]: c["contribution"] for c in exp["contributions"]}
+    assert by["A"] == pytest.approx(2 * (3.0 - bg["a"].mean()), abs=1e-3)
+    assert by["B"] == pytest.approx(0.0 - bg["b"].mean(), abs=1e-3)
+    assert by["C"] == 0.0  # unused feature: no contribution
+    assert exp["contributions"][0]["group"] == "A" and exp["prediction"] == 6.0
+
+
+def test_simulate_explanation_and_listed_reasons(client, art):
+    o = art.test_predictions["outlook"]
+    for r in o["buy"] + o["depreciation_risk"]:
+        assert 1 <= len(r["reasons"]) <= 3
+        assert all(c["contribution"] > 0 and c["group"] and "key_value" in c for c in r["reasons"])
+    pid = o["depreciation_risk"][0]["player_id"]
+    plain = client.post("/api/simulate", json={"player_id": pid}).json()
+    assert "explanation" not in plain
+    out = client.post("/api/simulate", json={"player_id": pid, "explain": True}).json()
+    exp = out["explanation"]
+    assert set(exp) == {"method", "p_up", "p_down", "expected_log_return"}
+    assert exp["p_down"]["prediction"] == pytest.approx(out["outlook_12m"]["p_down"], abs=1e-3)
+    assert exp["p_up"]["prediction"] == pytest.approx(out["outlook_12m"]["p_up"], abs=1e-3)
+    assert len(exp["p_down"]["contributions"]) == 10
+    listed = o["depreciation_risk"][0]["reasons"][0]
+    top_positive = next(c for c in exp["p_down"]["contributions"] if c["contribution"] > 0)
+    assert top_positive["group"] == listed["group"]

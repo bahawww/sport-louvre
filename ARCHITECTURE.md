@@ -61,6 +61,7 @@ Python 3.12, FastAPI, scikit-learn 1.6.
 | `features.py` | The only place features are defined. `prefix_features(values, days, ages)` + `assemble_row(...)` for real histories, `profile_row(...)` for the synthetic form. |
 | `ml_pipeline.py` | Data loading and repair, panel building, estimators, evaluation, conformal intervals, artifact cache, inference helpers. |
 | `main.py` | API. `/api/simulate` calls the same feature functions as training. |
+| `evaluation.py` | Report tables: reliability bins, segment errors, baseline headlines, deciles, per-player explanations. Trains nothing. |
 | `report.py` | Prints `reports/metrics_report.md` (before vs after). |
 | `tests/test_pipeline.py` | Leak checks, train/serve equality, API contract. Run with `deploy/test.sh`. |
 

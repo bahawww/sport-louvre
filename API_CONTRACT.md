@@ -4,7 +4,8 @@ Base URL: `/api` (Caddy proxies to `api:8000`). Fields marked **new** were added
 every field that existed before is still present with the same type.
 
 ## `GET /api/health`
-`{ "status": "ok", "players": 2418, "history_rows": 47909 }`
+`{ "status": "ok", "players": 2418, "history_rows": 47909, "model_version", "trained_at", "data_as_of" }`
+(last three **new**)
 
 ## `GET /api/overview`
 - `dataset`: `{ total_players, train_size, test_size, history_rows, leagues, trajectories }`
@@ -24,6 +25,16 @@ every field that existed before is still present with the same type.
   - **new** `task: "forecast"`, `tasks: { forecast, fundamental, profile }`, each
     `{ models[], best_model, features[], validation: { group_kfold, fixed_horizon, holdout_value_ge_50m }, intervals: { method, holdout: { level, coverage, median_width_ratio, n }, q_hat_log, n_calibration } }`
   - `tasks.fundamental.tautology_probe`: how well the fundamental features rebuild the last price
+- **new** `classification.clean_mode.headline`: selected model next to the persistence baseline
+  (`metrics, persistence, gain_vs_persistence, fixed_horizon`); `calibration`: reliability bins
+  (`top_label[]`, `per_class{}`; each bin `lo, hi, n, predicted, observed`).
+- **new** `regression.tasks.<task>.headline`: `{ model, metrics, naive_last_value, skill_vs_naive, beats_naive_eur, beats_naive_log, value_ge_50m }`;
+  `intervals.coverage_by_value_tier[]`.
+- **new** `outlook`: evaluation of the 12-month outlook model: `{ task, threshold, min_value_eur, train_rows, validation }`,
+  `validation` holds hit rates plus `deciles[]`, `threshold_sweep[]`, `calibration{p_up,p_down}`, `by_age[]`, `by_value_tier[]`, `feature_importance[]`.
+- **new** `leak_audit`: `{ finding, rule, rule_accuracy, share_players_target_exposed, target_equals_csv_peak_when_exposed, contamination_test, previous_pipeline }`.
+- **new** `data_card`: `{ source, players, valuation_points, first_valuation, data_as_of, population, unit, label, repairs, known_gaps[], intended_use, not_for }`.
+- **new** `model_card`: `{ version, trained_at, python, scikit_learn, seed, models, training_seconds, tests }`.
 - **new** `out_of_time`: `{ cutoff, train_rows, sets: { unseen_players_future, seen_players_future } }`,
   each set `{ rows, classification[model], regression[task][model] }`
 
@@ -49,6 +60,9 @@ every field that existed before is still present with the same type.
     players whose price fell > 40% in the prior 12 months.
 - `error_analysis`: `{ leakage_delta_acc, growing_vs_stable_confusion_count, top_underpredicted_superstars[], league_bias[] }`
   (`league_bias` and superstars use the forecast residual; **new** `league_bias_model`).
+  - **new** `segments`: `{ value_tier[], age[], position_group[], league[] }`, each row
+    `{ segment, n, forecast{mae,medape,bias_pct,rmse_log}, naive{...}, forecast_beats_naive_log, fundamental{...}, accuracy, persistence_accuracy }`.
+- Outlook list rows carry **new** `reasons[]` (up to 3): `{ group, contribution, key_feature, key_value }`.
 
 ## `GET /api/history?q=&league=&limit=30`
 `players[]`: `player_id, name, age, nationality, league_name, peak_club, current_value_eur, peak_value_eur, trajectory, history[{ date, value_eur, club, age_at_date }]`
@@ -91,5 +105,7 @@ Legacy body, still valid:
 - **new**, player modes only: `fair_value_eur, fair_value_range_eur, market_value_eur, valuation_gap_eur, valuation_gap_pct, valuation_status, valuation_basis, horizon_years, player{...}, features{...}`,
   and when a scenario is applied `baseline{...}` + `scenario_delta_eur`.
   Without scenario changes the response also carries `outlook_12m` (the player's outlook row).
+  With request field `"explain": true` it adds `explanation`: `{ method, p_up, p_down, expected_log_return }`,
+  each `{ prediction, typical, contributions[{ group, contribution, key_feature, key_value }] }` over 10 feature groups.
 
 Errors: `404` unknown `player_id`; `422` missing profile fields, unknown league, or invalid scenario.

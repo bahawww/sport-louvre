@@ -35,7 +35,33 @@ def main() -> None:
     out: list[str] = []
     w = out.append
 
+    card, mc = o["data_card"], o["model_card"]
     w("# Metrics report: before vs after\n")
+    w(f"Model version `{mc['version']}`, trained {mc['trained_at']} (scikit-learn {mc['scikit_learn']}, seed {mc['seed']}). "
+      f"Data as of {card['data_as_of']}: {card['players']} players, {card['valuation_points']} valuations since {card['first_valuation']}.\n")
+    hc = c["clean_mode"]["headline"]
+    hf = tasks["forecast"]["headline"]
+    w("## 0. Headline: model vs baseline\n")
+    w("| Task | Model | Baseline | Verdict |")
+    w("|---|---|---|---|")
+    w(f"| Trajectory (accuracy / macro-F1) | {hc['metrics']['accuracy']:.3f} / {hc['metrics']['macro_f1']:.3f} | "
+      f"persistence {hc['persistence']['accuracy']:.3f} / {hc['persistence']['macro_f1']:.3f} | "
+      f"+{hc['gain_vs_persistence']['accuracy_pp']:.1f} pp accuracy, +{hc['gain_vs_persistence']['macro_f1_pp']:.1f} pp macro-F1, "
+      f"log-loss −{hc['gain_vs_persistence']['log_loss_reduction']:.0%} |")
+    w(f"| Forecast, euro (MAE / RMSE) | {eur(hf['metrics']['mae'])} / {eur(hf['metrics']['rmse'])} | "
+      f"naive {eur(hf['naive_last_value']['mae'])} / {eur(hf['naive_last_value']['rmse'])} | "
+      f"{'beats' if hf['beats_naive_eur'] else '**does not beat**'} naive |")
+    w(f"| Forecast, log (RMSE log) | {hf['metrics']['rmse_log']:.4f} | naive {hf['naive_last_value']['rmse_log']:.4f} | "
+      f"{'beats' if hf['beats_naive_log'] else '**does not beat**'} naive ({hf['skill_vs_naive']['rmse_log']:.0%} less error) |")
+    t50 = hf["value_ge_50m"]
+    w(f"| Forecast, players ≥ €50M (MAE, n={t50['n']}) | {eur(t50['metrics']['mae'])} | naive {eur(t50['naive_last_value']['mae'])} | "
+      f"{'beats' if t50['skill_vs_naive']['mae'] > 0 else '**does not beat**'} naive |")
+    ov = o["outlook"]["validation"]
+    w(f"| 12-month outlook, buy signal hit rate | {ov['buy']['went_up']:.1%} | base rate {ov['base_rate']['up']:.1%} | "
+      f"+{(ov['buy']['went_up'] - ov['base_rate']['up']) * 100:.0f} pp |")
+    w(f"| 12-month outlook, risk signal hit rate | {ov['depreciation_risk']['went_down']:.1%} | base rate {ov['base_rate']['down']:.1%} | "
+      f"+{(ov['depreciation_risk']['went_down'] - ov['base_rate']['down']) * 100:.0f} pp |")
+    w("")
     w(f"Test set: the same {o['dataset']['test_size']} players (stratified 80:20, seed 42), "
       "target = each player's last valuation update.\n")
 
@@ -46,7 +72,11 @@ def main() -> None:
     w(f"- In those rows ({lp['share_rows_target_exposed']:.1%} of players) `peak_value_eur` "
       f"**was** the target value ({lp['target_equals_peak_when_peak_gt_prepeak']:.0%} equal).")
     w("- Cause: CSV summary columns are computed over the full history, target point included. "
-      "The old numbers below are therefore inflated and not a fair baseline.\n")
+      "The old numbers below are therefore inflated and not a fair baseline.")
+    ct = o["leak_audit"]["contamination_test"]
+    w(f"- Reproduced on the current pipeline: adding `{'`, `'.join(ct['columns_added'])}` from the CSV to the same classifier "
+      f"lifts accuracy from {ct['without_csv_columns']['accuracy']:.4f} to {ct['with_csv_columns']['accuracy']:.4f} "
+      f"(+{ct['accuracy_inflation_pp']:.1f} pp).\n")
 
     w("## 2. Trajectory classification (5 classes)\n")
     w("| Metric | Before: pipeline (leaky) | Before: `/api/simulate` path | After: clean | After: persistence baseline |")
@@ -155,6 +185,74 @@ def main() -> None:
     f = v["fell_over_40pct_prior_12m"]
     w(f"| Old screen logic: price fell >40% in prior 12 months | {f['n']} | {f['went_up']:.1%} | {f['went_down']:.1%} | {f['median_log_return']:+.2f} |")
     w(f"\nCurrent signals: {ol['signal_counts']}.")
+    w("\n### Predicted vs realised 12-month return by decile (out-of-time)\n")
+    w("| Decile | n | Predicted median | Realised median | Went up | Went down |")
+    w("|---|---|---|---|---|---|")
+    for dd in v["deciles"]:
+        w(f"| {dd['decile']} | {dd['n']} | {dd['predicted_median']:+.2f} | {dd['realised_median']:+.2f} | {dd['share_up']:.0%} | {dd['share_down']:.0%} |")
+    w("\n### Hit rate by probability threshold (value ≥ €3M)\n")
+    w("| Threshold | Buy n | Went up | Risk n | Went down |")
+    w("|---|---|---|---|---|")
+    for t in v["threshold_sweep"]:
+        w(f"| {t['threshold']:.1f} | {t['buy_n']} | {t['buy_went_up']:.1%} | {t['risk_n']} | {t['risk_went_down']:.1%} |")
+    w("\n### Calibration of P(up)\n")
+    w("| Predicted | Observed | n |")
+    w("|---|---|---|")
+    for b in v["calibration"]["p_up"]:
+        w(f"| {b['predicted']:.2f} | {b['observed']:.2f} | {b['n']} |")
+    w("\n### Signals by age (out-of-time)\n")
+    w("| Age | n | Base up | Base down | Buy n | Buy went up | Risk n | Risk went down |")
+    w("|---|---|---|---|---|---|---|---|")
+    fmtp = lambda x: "-" if x is None else f"{x:.0%}"
+    for sgm in v["by_age"]:
+        w(f"| {sgm['segment']} | {sgm['n']} | {sgm['base_up']:.0%} | {sgm['base_down']:.0%} | {sgm['buy_n']} | {fmtp(sgm['buy_went_up'])} | {sgm['risk_n']} | {fmtp(sgm['risk_went_down'])} |")
+    w("\nTop outlook features (permutation, out-of-time): "
+      + ", ".join(f"`{f['feature']}` {f['importance']:.2f}" for f in v["feature_importance"][:6]) + ".")
+
+    w("\n## 9. Calibration of the trajectory classifier (holdout)\n")
+    w("| Confidence bin | n | Mean confidence | Accuracy |")
+    w("|---|---|---|---|")
+    for b in c["clean_mode"]["calibration"]["top_label"]:
+        w(f"| {b['lo']:.1f}-{b['hi']:.1f} | {b['n']} | {b['predicted']:.3f} | {b['observed']:.3f} |")
+    w("\n### Interval coverage by value tier (nominal 80%)\n")
+    w("| Task | Tier | n | Coverage | Median hi/lo |")
+    w("|---|---|---|---|---|")
+    for task, t in tasks.items():
+        for tier in t["intervals"]["coverage_by_value_tier"]:
+            w(f"| {task} | {tier['segment']} | {tier['n']} | {tier['coverage']:.1%} | {tier['median_width_ratio']:.2f}× |")
+
+    w("\nIntervals under-cover for players worth ≥ €50M on all three tasks (small n): treat ranges for superstars as too narrow.")
+    w("\n## 10. Error by segment (holdout)\n")
+    seg = art.test_predictions["error_analysis"]["segments"]
+    for dim, rows_ in seg.items():
+        w(f"### {dim}\n")
+        w("| Segment | n | Forecast MAE | Naive MAE | Forecast RMSE log | Naive RMSE log | Forecast bias | Fundamental median APE | Accuracy | Persistence acc. |")
+        w("|---|---|---|---|---|---|---|---|---|---|")
+        for r in rows_:
+            w(f"| {r['segment']} | {r['n']} | {eur(r['forecast']['mae'])} | {eur(r['naive']['mae'])} | {r['forecast']['rmse_log']:.3f} | "
+              f"{r['naive']['rmse_log']:.3f} | {r['forecast']['bias_pct']:+.1f}% | {r['fundamental']['medape']:.0%} | {r['accuracy']:.1%} | {r['persistence_accuracy']:.1%} |")
+        w("")
+
+    w("## 11. Why a player is on the list (example explanations)\n")
+    w(ol["explanation_method"] + "\n")
+    for title, key in (("Buy", "buy"), ("Depreciation risk", "depreciation_risk")):
+        w(f"| {title} | Value now | Expected | Top reasons (group: key value, contribution) |")
+        w("|---|---|---|---|")
+        for r in ol[key][:5]:
+            reasons = "; ".join(f"{x['group']}: {x['key_feature']}={x['key_value']} ({x['contribution']:+.2f})" for x in r["reasons"])
+            w(f"| {r['name']} ({r['age']:.0f}) | {eur(r['current_value_eur'])} | {eur(r['expected_value_eur'])} | {reasons} |")
+        w("")
+
+    w("## 12. Data card\n")
+    w(f"- Source: {card['source']}")
+    w(f"- Population: {card['population']}")
+    w(f"- Unit: {card['unit']}")
+    w(f"- Label: {card['label']}")
+    w(f"- Repairs: {card['repairs']['positions_repaired_from_sidecar']} positions repaired, {card['repairs']['positions_still_unknown']} unknown, "
+      f"{card['repairs']['age_values_replaced_from_history']} ages replaced from history, {card['repairs']['history_rows_dropped_nonpositive']} non-positive valuations dropped.")
+    w("- Known gaps: " + " ".join(card["known_gaps"]))
+    w(f"- Intended use: {card['intended_use']}")
+    w(f"- Not for: {card['not_for']}")
     w(f"\nTraining time: {o['methodology']['training_seconds']} s. Panel rows used for training: {o['dataset']['train_rows']}.")
     print("\n".join(out))
 
