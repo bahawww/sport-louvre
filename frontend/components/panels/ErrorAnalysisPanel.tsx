@@ -4,10 +4,16 @@ import { useMemo } from "react";
 
 import { EChart } from "@/components/chart";
 import { TrajectoryBadge } from "@/components/trajectory-badge";
-import type { TestPredictionsResponse } from "@/lib/api";
+import type { OverviewResponse, TestPredictionsResponse } from "@/lib/api";
 import { fmt } from "@/lib/format";
 
-export function ErrorAnalysisPanel({ preds }: { preds: TestPredictionsResponse }) {
+export function ErrorAnalysisPanel({
+  overview,
+  preds,
+}: {
+  overview: OverviewResponse;
+  preds: TestPredictionsResponse;
+}) {
   const ea = preds.error_analysis;
 
   const leagueOption = useMemo(() => {
@@ -75,7 +81,9 @@ export function ErrorAnalysisPanel({ preds }: { preds: TestPredictionsResponse }
 
         <div className="rounded-xl border border-rose-500/30 bg-[#121A24] p-5">
           <p className="text-xs font-semibold text-rose-400">Superstar & English Tax</p>
-          <p className="mt-2 text-3xl font-extrabold text-[#F1F5F9]">508 / 508</p>
+          <p className="mt-2 text-3xl font-extrabold text-[#F1F5F9]">
+            {fmt.int(overview.dataset.total_players)} / {fmt.int(overview.dataset.total_players)}
+          </p>
           <p className="mt-2 text-xs leading-relaxed text-[#94A3B8]">
             <code>last_value_eur</code> identik dengan target dan telah dibuang. Bintang Premier League
             cenderung mengalami under-prediction karena premi pasar & eksposur komersial.

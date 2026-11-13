@@ -22,162 +22,169 @@ type WfNode = {
 const W = 172;
 const H = 74;
 
-const NODES: WfNode[] = [
-  {
-    id: "csv",
-    x: 8,
-    y: 134,
-    title: "1. Muat 2 CSV",
-    sub: "508 pemain + 9.764 riwayat",
-    stage: "Ingestion",
-    color: "#38BDF8",
-    detail:
-      "FastAPI membaca transfermarkt_player_values.csv (508 baris, 36 kolom) dan transfermarkt_value_history.csv (9.764 titik valuasi historis) dengan encoding utf-8-sig agar BOM UTF-8 bersih.",
-    specs: [
-      "Encoding: utf-8-sig",
-      "Liga: Premier League, La Liga, Serie A, Bundesliga, Ligue 1",
-      "Target klasifikasi: trajectory (5 kelas) · Target regresi: current_value_eur",
-    ],
-  },
-  {
-    id: "lag",
-    x: 212,
-    y: 134,
-    title: "2. Fitur Pra-Akhir",
-    sub: "Ekstrak vals[:-1], buang bocoran",
-    stage: "Feature Engineering",
-    color: "#10B981",
-    detail:
-      "Titik valuasi terakhir v[-1] (identik dengan current_value_eur) dan fitur post-hoc (value_cagr, post_peak_decline_pct, value_multiplier_x) dibuang dari Mode Clean. Sebagai gantinya, dihitung fitur momentum murni dari histori sebelum titik akhir (vals[:-1]).",
-    specs: [
-      "Dibuang: last_value_eur, value_cagr, post_peak_decline_pct, value_multiplier_x",
-      "Ditambah: pre_last_value_eur, pre_mom1, pre_mom1_ann, pre_cagr, pre_drawdown_pct",
-      "Total fitur Clean: 25 numerik + 2 kategorikal (league_name, nationality_grouped)",
-    ],
-  },
-  {
-    id: "prep",
-    x: 416,
-    y: 134,
-    title: "3. Preprocessing",
-    sub: "Imputer + Scaler + OHE",
-    stage: "Transformation",
-    color: "#38BDF8",
-    detail:
-      "ColumnTransformer memproses fitur numerik dan kategorikal secara terpisah di dalam Pipeline scikit-learn agar tidak terjadi kebocoran statistik test set saat scaling.",
-    specs: [
-      "Numerik: SimpleImputer(strategy='median') → StandardScaler()",
-      "Kategorikal: SimpleImputer(fill_value='Other') → OneHotEncoder(handle_unknown='ignore')",
-      "Top-12 kebangsaan dipertahankan, sisanya digabung ke 'Other'",
-    ],
-  },
-  {
-    id: "split",
-    x: 620,
-    y: 134,
-    title: "4. Split 80 : 20",
-    sub: "Stratified, seed 42 (406 / 102)",
-    stage: "Validation Split",
-    color: "#38BDF8",
-    detail:
-      "Dataset dibagi menjadi 406 data latih dan 102 data uji menggunakan stratified split berdasarkan kelas trajectory dengan random_state=42 sehingga proporsi 5 kelas identik.",
-    specs: [
-      "Train set: 406 pemain (80%)",
-      "Test set: 102 pemain (20%)",
-      "Stratify: trajectory · Seed: 42 (deterministik)",
-    ],
-  },
-  {
-    id: "rf",
-    x: 840,
-    y: 20,
-    title: "Random Forest",
-    sub: "400 trees · Clean 87,25%",
-    stage: "Model Engine",
-    color: "#10B981",
-    detail:
-      "Ensemble 400 pohon keputusan paralel yang memvoting kelas trajectory. Menangkap hubungan non-linear antara umur, drawdown pra-akhir, dan momentum harga.",
-    specs: [
-      "Hyperparameter: n_estimators=400, random_state=42",
-      "Regressor: RandomForestRegressor(n_estimators=200)",
-    ],
-  },
-  {
-    id: "lr",
-    x: 840,
-    y: 134,
-    title: "Logistic Regression",
-    sub: "C=10 · F1 terbaik 85,80%",
-    stage: "Model Engine",
-    color: "#38BDF8",
-    detail:
-      "Model linear multinomial dengan regularisasi L2. Memberikan F1-weighted terbaik dan probabilitas kelas yang halus untuk Simulator Scouting.",
-    specs: [
-      "Hyperparameter: max_iter=3000, C=10.0, random_state=42",
-      "Regressor pembanding: LinearRegression()",
-    ],
-  },
-  {
-    id: "gb",
-    x: 840,
-    y: 248,
-    title: "Gradient Boosting",
-    sub: "200 trees · Clean 84,31%",
-    stage: "Model Engine",
-    color: "#F59E0B",
-    detail:
-      "Boosting sekuensial 200 pohon yang memperbaiki residual kesalahan pohon sebelumnya secara bertahap.",
-    specs: [
-      "Classifier: n_estimators=200, max_depth=3, random_state=42",
-      "Regressor: GradientBoostingRegressor(n_estimators=150)",
-    ],
-  },
-  {
-    id: "score",
-    x: 1048,
-    y: 134,
-    title: "5. Uji 102 Sampel",
-    sub: "Akurasi, F1, R², MAE, Residual",
-    stage: "Evaluation",
-    color: "#10B981",
-    detail:
-      "Seluruh model dievaluasi pada 102 pemain uji yang tidak pernah dilihat selama training, menghasilkan confusion matrix, metrik regresi, dan daftar residual.",
-    specs: [
-      "Klasifikasi: Accuracy, F1 Weighted, Precision, Recall, Confusion Matrix 5×5",
-      "Regresi: R², MAE (€), RMSE (€), Gap Undervalued / Overvalued",
-    ],
-  },
-  {
-    id: "audit",
-    x: 1252,
-    y: 48,
-    title: "Audit Leakage",
-    sub: "Bandingkan Clean vs Full",
-    stage: "Governance",
-    color: "#F59E0B",
-    detail:
-      "Pipeline juga melatih Mode Full Features (dengan fitur bocoran) sebagai kontrol eksperimen untuk membuktikan inflasi akurasi semu (+13–33 pp).",
-    specs: [
-      "Membuktikan bahaya fitur post-hoc di produksi",
-      "Menandai bias English Tax & ambiguitas growing vs stable",
-    ],
-  },
-  {
-    id: "serve",
-    x: 1252,
-    y: 220,
-    title: "FastAPI & Simulator",
-    sub: "API live + What-If Scouting",
-    stage: "Production Serving",
-    color: "#10B981",
-    detail:
-      "Artefak model disimpan di memori FastAPI dan disajikan lewat endpoint REST (/api/overview, /api/simulate, /api/datasets) melalui Caddy & Cloudflare Tunnel.",
-    specs: [
-      "Endpoint: /api/overview, /api/test-predictions, /api/history, /api/simulate, /api/datasets",
-      "Stack: FastAPI (:8000) + Next.js (:3000) + Caddy (:8310)",
-    ],
-  },
-];
+function buildNodes(overview: OverviewResponse): WfNode[] {
+  const totalPlayers = fmt.int(overview.dataset.total_players);
+  const trainSize = fmt.int(overview.dataset.train_size);
+  const testSize = fmt.int(overview.dataset.test_size);
+  const historyRows = fmt.int(overview.dataset.history_rows);
+
+  return [
+    {
+      id: "csv",
+      x: 8,
+      y: 134,
+      title: "1. Muat 2 CSV",
+      sub: `${totalPlayers} pemain + ${historyRows} riwayat`,
+      stage: "Ingestion",
+      color: "#38BDF8",
+      detail:
+        `FastAPI membaca transfermarkt_player_values.csv (${totalPlayers} baris, 36 kolom) dan transfermarkt_value_history.csv (${historyRows} titik valuasi historis) dengan encoding utf-8-sig agar BOM UTF-8 bersih.`,
+      specs: [
+        "Encoding: utf-8-sig",
+        "Liga: Premier League, La Liga, Serie A, Bundesliga, Ligue 1",
+        "Target klasifikasi: trajectory (5 kelas) · Target regresi: current_value_eur",
+      ],
+    },
+    {
+      id: "lag",
+      x: 212,
+      y: 134,
+      title: "2. Fitur Pra-Akhir",
+      sub: "Ekstrak vals[:-1], buang bocoran",
+      stage: "Feature Engineering",
+      color: "#10B981",
+      detail:
+        "Titik valuasi terakhir v[-1] (identik dengan current_value_eur) dan fitur post-hoc (value_cagr, post_peak_decline_pct, value_multiplier_x) dibuang dari Mode Clean. Sebagai gantinya, dihitung fitur momentum murni dari histori sebelum titik akhir (vals[:-1]).",
+      specs: [
+        "Dibuang: last_value_eur, value_cagr, post_peak_decline_pct, value_multiplier_x",
+        "Ditambah: pre_last_value_eur, pre_mom1, pre_mom1_ann, pre_cagr, pre_drawdown_pct",
+        "Total fitur Clean: 25 numerik + 2 kategorikal (league_name, nationality_grouped)",
+      ],
+    },
+    {
+      id: "prep",
+      x: 416,
+      y: 134,
+      title: "3. Preprocessing",
+      sub: "Imputer + Scaler + OHE",
+      stage: "Transformation",
+      color: "#38BDF8",
+      detail:
+        "ColumnTransformer memproses fitur numerik dan kategorikal secara terpisah di dalam Pipeline scikit-learn agar tidak terjadi kebocoran statistik test set saat scaling.",
+      specs: [
+        "Numerik: SimpleImputer(strategy='median') → StandardScaler()",
+        "Kategorikal: SimpleImputer(fill_value='Other') → OneHotEncoder(handle_unknown='ignore')",
+        "Top-12 kebangsaan dipertahankan, sisanya digabung ke 'Other'",
+      ],
+    },
+    {
+      id: "split",
+      x: 620,
+      y: 134,
+      title: "4. Split 80 : 20",
+      sub: `Stratified, seed 42 (${trainSize} / ${testSize})`,
+      stage: "Validation Split",
+      color: "#38BDF8",
+      detail:
+        `Dataset dibagi menjadi ${trainSize} data latih dan ${testSize} data uji menggunakan stratified split berdasarkan kelas trajectory dengan random_state=42 sehingga proporsi 5 kelas identik.`,
+      specs: [
+        `Train set: ${trainSize} pemain (80%)`,
+        `Test set: ${testSize} pemain (20%)`,
+        "Stratify: trajectory · Seed: 42 (deterministik)",
+      ],
+    },
+    {
+      id: "rf",
+      x: 840,
+      y: 20,
+      title: "Random Forest",
+      sub: "400 trees · Ensemble",
+      stage: "Model Engine",
+      color: "#10B981",
+      detail:
+        "Ensemble 400 pohon keputusan paralel yang memvoting kelas trajectory. Menangkap hubungan non-linear antara umur, drawdown pra-akhir, dan momentum harga.",
+      specs: [
+        "Hyperparameter: n_estimators=400, random_state=42",
+        "Regressor: RandomForestRegressor(n_estimators=200)",
+      ],
+    },
+    {
+      id: "lr",
+      x: 840,
+      y: 134,
+      title: "Logistic Regression",
+      sub: "C=10 · Multinomial L2",
+      stage: "Model Engine",
+      color: "#38BDF8",
+      detail:
+        "Model linear multinomial dengan regularisasi L2. Memberikan probabilitas kelas yang halus untuk Simulator Scouting.",
+      specs: [
+        "Hyperparameter: max_iter=3000, C=10.0, random_state=42",
+        "Regressor pembanding: LinearRegression()",
+      ],
+    },
+    {
+      id: "gb",
+      x: 840,
+      y: 248,
+      title: "Gradient Boosting",
+      sub: "200 trees · Sequential",
+      stage: "Model Engine",
+      color: "#F59E0B",
+      detail:
+        "Boosting sekuensial 200 pohon yang memperbaiki residual kesalahan pohon sebelumnya secara bertahap.",
+      specs: [
+        "Classifier: n_estimators=200, max_depth=3, random_state=42",
+        "Regressor: GradientBoostingRegressor(n_estimators=150)",
+      ],
+    },
+    {
+      id: "score",
+      x: 1048,
+      y: 134,
+      title: `5. Uji ${testSize} Sampel`,
+      sub: "Akurasi, F1, R², MAE, Residual",
+      stage: "Evaluation",
+      color: "#10B981",
+      detail:
+        `Seluruh model dievaluasi pada ${testSize} pemain uji yang tidak pernah dilihat selama training, menghasilkan confusion matrix, metrik regresi, dan daftar residual.`,
+      specs: [
+        "Klasifikasi: Accuracy, F1 Weighted, Precision, Recall, Confusion Matrix 5×5",
+        "Regresi: R², MAE (€), RMSE (€), Gap Undervalued / Overvalued",
+      ],
+    },
+    {
+      id: "audit",
+      x: 1252,
+      y: 48,
+      title: "Audit Leakage",
+      sub: "Bandingkan Clean vs Full",
+      stage: "Governance",
+      color: "#F59E0B",
+      detail:
+        "Pipeline juga melatih Mode Full Features (dengan fitur bocoran) sebagai kontrol eksperimen untuk membuktikan inflasi akurasi semu (+13–33 pp).",
+      specs: [
+        "Membuktikan bahaya fitur post-hoc di produksi",
+        "Menandai bias English Tax & ambiguitas growing vs stable",
+      ],
+    },
+    {
+      id: "serve",
+      x: 1252,
+      y: 220,
+      title: "FastAPI & Simulator",
+      sub: "API live + What-If Scouting",
+      stage: "Production Serving",
+      color: "#10B981",
+      detail:
+        "Artefak model disimpan di memori FastAPI dan disajikan lewat endpoint REST (/api/overview, /api/simulate, /api/datasets) melalui Caddy & Cloudflare Tunnel.",
+      specs: [
+        "Endpoint: /api/overview, /api/test-predictions, /api/history, /api/simulate, /api/datasets",
+        "Stack: FastAPI (:8000) + Next.js (:3000) + Caddy (:8310)",
+      ],
+    },
+  ];
+}
 
 const EDGES: [string, string][] = [
   ["csv", "lag"],
@@ -193,8 +200,6 @@ const EDGES: [string, string][] = [
   ["score", "serve"],
 ];
 
-const BY_ID: Record<string, WfNode> = Object.fromEntries(NODES.map((n) => [n.id, n]));
-
 function edgePath(a: WfNode, b: WfNode): string {
   const x1 = a.x + W;
   const y1 = a.y + H / 2;
@@ -204,73 +209,85 @@ function edgePath(a: WfNode, b: WfNode): string {
   return `M${x1} ${y1} C${mx} ${y1} ${mx} ${y2} ${x2 - 6} ${y2}`;
 }
 
-const GLOSSARY: { title: string; terms: [string, string][] }[] = [
-  {
-    title: "Data & Anti-Leakage",
-    terms: [
-      [
-        "Data Leakage",
-        "Kebocoran informasi target ke dalam fitur latih. Contoh di dataset ini: last_value_eur 100% sama dengan current_value_eur, sedangkan value_cagr dan post_peak_decline_pct baru bisa dihitung setelah valuasi akhir terjadi.",
+function buildGlossary(overview: OverviewResponse): { title: string; terms: [string, string][] }[] {
+  const trainSize = fmt.int(overview.dataset.train_size);
+  const testSize = fmt.int(overview.dataset.test_size);
+
+  return [
+    {
+      title: "Data & Anti-Leakage",
+      terms: [
+        [
+          "Data Leakage",
+          "Kebocoran informasi target ke dalam fitur latih. Contoh di dataset ini: last_value_eur 100% sama dengan current_value_eur, sedangkan value_cagr dan post_peak_decline_pct baru bisa dihitung setelah valuasi akhir terjadi.",
+        ],
+        [
+          "Fitur Pra-Akhir (vals[:-1])",
+          "Fitur momentum dan tren yang dihitung murni dari riwayat valuasi SEBELUM titik terakhir (pre_last_value_eur, pre_mom1, pre_cagr, pre_drawdown_pct). Sah dipakai tanpa membocorkan target.",
+        ],
+        [
+          "Stratified Split 80:20",
+          `Pembagian ${trainSize} data latih dan ${testSize} data uji (random_state=42) yang menjaga proporsi 5 kelas trajectory tetap seimbang di kedua sisi.`,
+        ],
+        [
+          "ColumnTransformer",
+          "Mesin pra-pemrosesan scikit-learn yang memisahkan pipeline numerik (SimpleImputer median + StandardScaler) dan kategorikal (OneHotEncoder untuk liga & top-12 kebangsaan).",
+        ],
       ],
-      [
-        "Fitur Pra-Akhir (vals[:-1])",
-        "Fitur momentum dan tren yang dihitung murni dari riwayat valuasi SEBELUM titik terakhir (pre_last_value_eur, pre_mom1, pre_cagr, pre_drawdown_pct). Sah dipakai tanpa membocorkan target.",
+    },
+    {
+      title: "Engine Klasifikasi & Regresi",
+      terms: [
+        [
+          "Random Forest (400 trees)",
+          "Ensemble 400 pohon keputusan paralel. Menangkap interaksi non-linear antara usia, drawdown, dan momentum pra-akhir pada Mode Clean.",
+        ],
+        [
+          "Logistic Regression (C=10)",
+          "Model linear multinomial dengan regularisasi L2. Menghasilkan probabilitas kelas yang terkalibrasi baik untuk Simulator Scouting.",
+        ],
+        [
+          "Gradient Boosting (200 trees)",
+          "Pohon sekuensial yang memperbaiki residual kesalahan pohon sebelumnya secara bertahap untuk klasifikasi dan regresi current_value_eur.",
+        ],
+        [
+          "Scouting Verdict & Residual",
+          "Selisih antara taksiran wajar model dan harga pasar aktual (pred - actual). Nilai positif besar menandakan pemain berpotensi undervalued (Hidden Gem).",
+        ],
       ],
-      [
-        "Stratified Split 80:20",
-        "Pembagian 406 data latih dan 102 data uji (random_state=42) yang menjaga proporsi 5 kelas trajectory tetap seimbang di kedua sisi.",
-      ],
-      [
-        "ColumnTransformer",
-        "Mesin pra-pemrosesan scikit-learn yang memisahkan pipeline numerik (SimpleImputer median + StandardScaler) dan kategorikal (OneHotEncoder untuk liga & top-12 kebangsaan).",
-      ],
-    ],
-  },
-  {
-    title: "Engine Klasifikasi & Regresi",
-    terms: [
-      [
-        "Random Forest (400 trees)",
-        "Ensemble 400 pohon keputusan paralel. Menangkap interaksi non-linear antara usia, drawdown, dan momentum pra-akhir dengan akurasi Clean tertinggi (87,25%).",
-      ],
-      [
-        "Logistic Regression (C=10)",
-        "Model linear multinomial dengan regularisasi L2. Menghasilkan F1-weighted tertinggi (85,80%) serta probabilitas kelas yang terkalibrasi baik untuk Simulator Scouting.",
-      ],
-      [
-        "Gradient Boosting (200 trees)",
-        "Pohon sekuensial yang memperbaiki residual kesalahan pohon sebelumnya. Pada regresi, menaksir current_value_eur dengan R² tinggi bersama Linear Regression (R² = 0,9798).",
-      ],
-      [
-        "Scouting Verdict & Residual",
-        "Selisih antara taksiran wajar model dan harga pasar aktual (pred - actual). Nilai positif besar menandakan pemain berpotensi undervalued (Hidden Gem).",
-      ],
-    ],
-  },
-];
+    },
+  ];
+}
 
 export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
   const [selectedId, setSelectedId] = useState<string>("rf");
   const [playing, setPlaying] = useState(false);
 
-  const selectedIdx = NODES.findIndex((n) => n.id === selectedId);
-  const selectedNode = BY_ID[selectedId] ?? NODES[0];
+  const nodes = useMemo(() => buildNodes(overview), [overview]);
+  const byId = useMemo<Record<string, WfNode>>(
+    () => Object.fromEntries(nodes.map((n) => [n.id, n])),
+    [nodes],
+  );
+  const glossary = useMemo(() => buildGlossary(overview), [overview]);
+
+  const selectedIdx = nodes.findIndex((n) => n.id === selectedId);
+  const selectedNode = byId[selectedId] ?? nodes[0];
 
   useEffect(() => {
     if (!playing) return;
     const timer = window.setInterval(() => {
       setSelectedId((prev) => {
-        const idx = NODES.findIndex((n) => n.id === prev);
+        const idx = nodes.findIndex((n) => n.id === prev);
         const next = idx + 1;
-        if (next >= NODES.length) {
+        if (next >= nodes.length) {
           setPlaying(false);
-          return NODES[NODES.length - 1].id;
+          return nodes[nodes.length - 1].id;
         }
-        return NODES[next].id;
+        return nodes[next].id;
       });
     }, 1400);
     return () => window.clearInterval(timer);
-  }, [playing]);
+  }, [playing, nodes]);
 
   const liveModelMetrics = useMemo(() => {
     const map: Record<string, string> = {
@@ -342,7 +359,7 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
               type="button"
               onClick={() => {
                 setPlaying(false);
-                setSelectedId(NODES[Math.max(0, selectedIdx - 1)].id);
+                setSelectedId(nodes[Math.max(0, selectedIdx - 1)].id);
               }}
               disabled={selectedIdx <= 0}
               className="inline-flex items-center gap-1 rounded-lg border border-[#243244] bg-[#0B1117] px-2.5 py-1.5 text-xs font-semibold text-[#F1F5F9] hover:border-[#10B981] disabled:opacity-40"
@@ -354,9 +371,9 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
               type="button"
               onClick={() => {
                 setPlaying(false);
-                setSelectedId(NODES[Math.min(NODES.length - 1, selectedIdx + 1)].id);
+                setSelectedId(nodes[Math.min(nodes.length - 1, selectedIdx + 1)].id);
               }}
-              disabled={selectedIdx >= NODES.length - 1}
+              disabled={selectedIdx >= nodes.length - 1}
               className="inline-flex items-center gap-1 rounded-lg border border-[#243244] bg-[#0B1117] px-2.5 py-1.5 text-xs font-semibold text-[#F1F5F9] hover:border-[#10B981] disabled:opacity-40"
             >
               Next
@@ -366,7 +383,7 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
               type="button"
               onClick={() => {
                 if (!playing) {
-                  setSelectedId(NODES[0].id);
+                  setSelectedId(nodes[0].id);
                   setPlaying(true);
                 } else {
                   setPlaying(false);
@@ -416,7 +433,7 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
               return (
                 <path
                   key={`${a}-${b}`}
-                  d={edgePath(BY_ID[a], BY_ID[b])}
+                  d={edgePath(byId[a], byId[b])}
                   fill="none"
                   stroke={activeEdge ? "#10B981" : "#334155"}
                   strokeWidth={activeEdge ? "2.6" : "2"}
@@ -424,7 +441,7 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
                 />
               );
             })}
-            {NODES.map((n) => {
+            {nodes.map((n) => {
               const isSelected = n.id === selectedId;
               return (
                 <g
@@ -478,7 +495,7 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
               <h4 className="text-sm font-extrabold text-[#F1F5F9]">{selectedNode.title}</h4>
             </div>
             <span className="text-xs text-[#64748B]">
-              Langkah {selectedIdx + 1} dari {NODES.length}
+              Langkah {selectedIdx + 1} dari {nodes.length}
             </span>
           </div>
 
@@ -538,7 +555,7 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {GLOSSARY.map((sec) => (
+        {glossary.map((sec) => (
           <div key={sec.title} className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
             <h3 className="text-base font-bold text-[#F1F5F9]">{sec.title}</h3>
             <dl className="mt-4 divide-y divide-[#1E293B]">

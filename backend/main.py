@@ -156,6 +156,10 @@ def simulate(req: SimulateRequest) -> dict[str, Any]:
     pre_prev = pre_last * (0.95 if age_past_peak <= 0.5 else 1.05)
     pre_peak = float(req.peak_value_eur)
     pre_drawdown = max(0.0, (pre_peak - pre_last) / max(pre_peak, 1.0))
+    pre_drawdown_prev = max(0.0, (pre_peak - pre_prev) / max(pre_peak, 1.0))
+    pre_dd_delta = pre_drawdown - pre_drawdown_prev
+    dt_gap_yr = 0.5
+    last_gap_yr = max(0.0, float(req.career_span_years) * 0.15)
     pre_mom1 = (pre_last - pre_prev) / max(pre_prev, 1.0)
     pre_mom2 = (pre_last - float(req.first_value_eur)) / max(float(req.first_value_eur), 1.0) * 0.25
     pre_mult = pre_last / max(float(req.first_value_eur), 1.0)
@@ -185,10 +189,13 @@ def simulate(req: SimulateRequest) -> dict[str, Any]:
         "pre_prev_value_eur": pre_prev,
         "pre_peak_value_eur": pre_peak,
         "pre_drawdown_pct": pre_drawdown,
+        "pre_drawdown_prev": pre_drawdown_prev,
+        "pre_dd_delta": pre_dd_delta,
+        "pre_dd_velocity": pre_dd_delta / dt_gap_yr,
         "pre_mom1": pre_mom1,
         "pre_mom2": pre_mom2,
         "pre_mom3": pre_mom2 * 1.1,
-        "pre_mom1_ann": pre_mom1 / 0.5,
+        "pre_mom1_ann": pre_mom1 / dt_gap_yr,
         "pre_multiplier": pre_mult,
         "is_pre_peak": is_pre_peak,
         "pre_slope": pre_slope,
@@ -196,6 +203,11 @@ def simulate(req: SimulateRequest) -> dict[str, Any]:
         "pre_ratio_mean": pre_last / max((float(req.first_value_eur) + pre_last) * 0.5, 1.0),
         "pre_recent_dd": pre_drawdown,
         "pre_span_yr": pre_span_yr,
+        "dt_gap_yr": dt_gap_yr,
+        "last_gap_yr": last_gap_yr,
+        "pre_consec_drops": 1.0 if age_past_peak > 0.5 else 0.0,
+        "pre_range_pos": (pre_last - float(req.first_value_eur)) / max(pre_peak - float(req.first_value_eur), 1.0),
+        "pre_volatility": float(req.value_volatility),
         "league_name": req.league_name.strip(),
         "nationality": nat_grouped,
     }
@@ -240,13 +252,13 @@ def _resolve_data_dir() -> Path:
 DATASET_CATALOG: dict[str, dict[str, Any]] = {
     "transfermarkt_player_values.csv": {
         "label": "Player Market Values (CSV)",
-        "description": "Dataset utama 508 pemain dari 5 liga top Eropa beserta 36 kolom fitur karier & target trajectory.",
+        "description": "Dataset utama pemain dari 5 liga top Eropa beserta 36 kolom fitur karier & target trajectory.",
         "format": "CSV",
         "media_type": "text/csv; charset=utf-8",
     },
     "transfermarkt_value_history.csv": {
         "label": "Historical Valuations (CSV)",
-        "description": "9.764 titik riwayat valuasi pasar per pemain lengkap dengan tanggal, klub, dan usia.",
+        "description": "Titik riwayat valuasi pasar per pemain lengkap dengan tanggal, klub, dan usia.",
         "format": "CSV",
         "media_type": "text/csv; charset=utf-8",
     },

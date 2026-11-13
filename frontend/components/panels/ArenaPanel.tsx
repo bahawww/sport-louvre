@@ -166,9 +166,12 @@ export function ArenaPanel({
         </div>
 
         <div className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
-          <h3 className="text-base font-bold text-[#F1F5F9]">Distribusi Kelas Trajectory (508 Pemain)</h3>
+          <h3 className="text-base font-bold text-[#F1F5F9]">
+            Distribusi Kelas Trajectory ({fmt.int(overview.dataset.total_players)} Pemain)
+          </h3>
           <p className="mt-1 text-xs text-[#94A3B8]">
-            Ketidakseimbangan kelas antara growing (228) dan falling_sharply (26).
+            Ketidakseimbangan kelas antara growing ({fmt.int(overview.dataset.trajectories.growing ?? 0)}) dan
+            falling_sharply ({fmt.int(overview.dataset.trajectories.falling_sharply ?? 0)}).
           </p>
           <div className="mt-4">
             <EChart option={trajDistOption} height={280} label="Distribusi kelas trajectory" />

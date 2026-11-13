@@ -89,7 +89,7 @@ export function DatasetPanel() {
               Dataset Total Pemain ({filtered.length} / {res.data.total_players})
             </h3>
             <p className="mt-0.5 text-xs text-[#94A3B8]">
-              Seluruh 508 pemain Transfermarkt 2025/2026 dari 5 liga top Eropa.
+              Seluruh {fmt.int(res.data.total_players)} pemain Transfermarkt 2025/2026 dari 5 liga top Eropa.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

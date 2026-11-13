@@ -226,7 +226,9 @@ export function ScoutingSimulatorPanel() {
             className="inline-flex items-center gap-2 rounded-lg border border-[#10B981]/50 bg-[#10B981]/10 px-3.5 py-2 text-xs font-bold text-[#10B981] transition hover:bg-[#10B981]/20"
           >
             <Search className="size-3.5" />
-            {loadedPlayer ? `Pemain: ${loadedPlayer.name}` : "Muat dari 508 Pemain Nyata"}
+            {loadedPlayer
+              ? `Pemain: ${loadedPlayer.name}`
+              : `Muat dari ${datasets.data ? fmt.int(datasets.data.total_players) : "..."} Pemain Nyata`}
           </button>
 
           {pickerOpen ? (

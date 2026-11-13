@@ -201,7 +201,7 @@ export function DiagnosticsPanel({
       <div className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-base font-bold text-[#F1F5F9]">
-            Tabel 102 Data Uji ({filtered.length} tampil)
+            Tabel {fmt.int(preds.rows.length)} Data Uji ({filtered.length} tampil)
           </h3>
           <div className="flex flex-wrap gap-2">
             <input

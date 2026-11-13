@@ -11,10 +11,14 @@ import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import (
+    ExtraTreesClassifier,
     GradientBoostingClassifier,
     GradientBoostingRegressor,
+    HistGradientBoostingClassifier,
+    HistGradientBoostingRegressor,
     RandomForestClassifier,
     RandomForestRegressor,
+    VotingClassifier,
 )
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression, LogisticRegression
@@ -59,6 +63,9 @@ CLEAN_NUM_FEATURES: list[str] = [
     "pre_prev_value_eur",
     "pre_peak_value_eur",
     "pre_drawdown_pct",
+    "pre_drawdown_prev",
+    "pre_dd_delta",
+    "pre_dd_velocity",
     "pre_mom1",
     "pre_mom2",
     "pre_mom3",
@@ -70,6 +77,11 @@ CLEAN_NUM_FEATURES: list[str] = [
     "pre_ratio_mean",
     "pre_recent_dd",
     "pre_span_yr",
+    "dt_gap_yr",
+    "last_gap_yr",
+    "pre_consec_drops",
+    "pre_range_pos",
+    "pre_volatility",
 ]
 
 LEAKAGE_EXTRA_NUM_FEATURES: list[str] = [
@@ -138,6 +150,15 @@ def _aggregate_feature_importance(
 
     if hasattr(model, "feature_importances_"):
         raw_imp = np.asarray(model.feature_importances_, dtype=float)
+    elif hasattr(model, "estimators_"):
+        imps = [
+            np.asarray(est.feature_importances_, dtype=float)
+            for est in model.estimators_
+            if hasattr(est, "feature_importances_")
+        ]
+        if not imps:
+            return []
+        raw_imp = np.mean(imps, axis=0)
     elif hasattr(model, "coef_"):
         coef = np.asarray(model.coef_, dtype=float)
         if coef.ndim == 2:
@@ -178,9 +199,24 @@ def _evaluate_classifiers(
     num_features: list[str],
 ) -> tuple[dict[str, Any], dict[str, Pipeline], dict[str, np.ndarray]]:
     specs = [
-        ("Random Forest", RandomForestClassifier(n_estimators=400, random_state=42)),
-        ("Gradient Boosting", GradientBoostingClassifier(n_estimators=200, max_depth=3, random_state=42)),
+        ("Random Forest", RandomForestClassifier(n_estimators=400, random_state=42, n_jobs=-1)),
+        ("Extra Trees", ExtraTreesClassifier(n_estimators=400, random_state=42, n_jobs=-1)),
+        ("Gradient Boosting", GradientBoostingClassifier(n_estimators=250, max_depth=3, learning_rate=0.04, subsample=0.85, random_state=42)),
+        ("HistGradientBoosting", HistGradientBoostingClassifier(max_iter=300, learning_rate=0.04, max_leaf_nodes=15, min_samples_leaf=20, l2_regularization=2.0, random_state=42)),
         ("Logistic Regression", LogisticRegression(max_iter=3000, C=10.0, random_state=42)),
+        (
+            "Soft Voting Ensemble",
+            VotingClassifier(
+                estimators=[
+                    ("gb", GradientBoostingClassifier(n_estimators=250, max_depth=3, learning_rate=0.04, subsample=0.85, random_state=42)),
+                    ("hgb", HistGradientBoostingClassifier(max_iter=300, learning_rate=0.04, max_leaf_nodes=15, min_samples_leaf=20, l2_regularization=2.0, random_state=42)),
+                    ("rf", RandomForestClassifier(n_estimators=400, random_state=42, n_jobs=-1)),
+                    ("lr", LogisticRegression(max_iter=3000, C=10.0, random_state=42)),
+                ],
+                voting="soft",
+                weights=[3, 3, 2, 1],
+            ),
+        ),
     ]
 
     models_out: list[dict[str, Any]] = []
@@ -228,8 +264,9 @@ def _evaluate_regressors(
     num_features: list[str],
 ) -> tuple[dict[str, Any], dict[str, Pipeline], dict[str, np.ndarray]]:
     specs = [
-        ("Random Forest Regressor", RandomForestRegressor(n_estimators=200, random_state=42)),
-        ("Gradient Boosting Regressor", GradientBoostingRegressor(n_estimators=150, random_state=42)),
+        ("Random Forest Regressor", RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1)),
+        ("Gradient Boosting Regressor", GradientBoostingRegressor(n_estimators=200, learning_rate=0.05, random_state=42)),
+        ("HistGradientBoosting Regressor", HistGradientBoostingRegressor(max_iter=300, learning_rate=0.05, random_state=42)),
         ("Linear Regression", LinearRegression()),
     ]
 
@@ -308,6 +345,7 @@ def build_artifacts() -> DashboardArtifacts:
         p3 = float(pre[-3]) if len(pre) >= 3 else p2
         p4 = float(pre[-4]) if len(pre) >= 4 else p3
         p_peak = float(np.max(pre)) if len(pre) else 0.0
+        p_min = float(np.min(pre)) if len(pre) else 0.0
         p_first = float(pre[0]) if len(pre) else 0.0
         p_mean = float(np.mean(pre)) if len(pre) else 0.0
         pre_span_yr = (
@@ -326,6 +364,14 @@ def build_artifacts() -> DashboardArtifacts:
             else 0.0
         )
         mom1 = (p1 - p2) / max(p2, 1.0)
+        dd1 = (p_peak - p1) / max(p_peak, 1.0)
+        dd2 = (p_peak - p2) / max(p_peak, 1.0)
+        cdrop = 0
+        for idx_i in range(len(pre) - 1, 0, -1):
+            if pre[idx_i] < pre[idx_i - 1]:
+                cdrop += 1
+            else:
+                break
         recent_peak = float(np.max(pre[-3:])) if len(pre) >= 3 else p_peak
         slope = (
             float(np.polyfit(np.arange(len(pre), dtype=float), pre, 1)[0]) / max(p_peak, 1.0)
@@ -336,7 +382,10 @@ def build_artifacts() -> DashboardArtifacts:
             "pre_last_value_eur": p1,
             "pre_prev_value_eur": p2,
             "pre_peak_value_eur": p_peak,
-            "pre_drawdown_pct": (p_peak - p1) / max(p_peak, 1.0),
+            "pre_drawdown_pct": dd1,
+            "pre_drawdown_prev": dd2,
+            "pre_dd_delta": dd1 - dd2,
+            "pre_dd_velocity": (dd1 - dd2) / dt_gap_yr,
             "pre_mom1": mom1,
             "pre_mom2": (p1 - p3) / max(p3, 1.0),
             "pre_mom3": (p1 - p4) / max(p4, 1.0),
@@ -348,6 +397,10 @@ def build_artifacts() -> DashboardArtifacts:
             "pre_ratio_mean": p1 / max(p_mean, 1.0),
             "pre_recent_dd": (recent_peak - p1) / max(recent_peak, 1.0),
             "pre_span_yr": pre_span_yr,
+            "dt_gap_yr": dt_gap_yr,
+            "pre_consec_drops": float(cdrop),
+            "pre_range_pos": (p1 - p_min) / max(p_peak - p_min, 1.0),
+            "pre_volatility": float(np.std(pre) / max(p_mean, 1.0)) if len(pre) > 1 and p_mean > 0 else 0.0,
         }
 
     for col in [
@@ -355,6 +408,9 @@ def build_artifacts() -> DashboardArtifacts:
         "pre_prev_value_eur",
         "pre_peak_value_eur",
         "pre_drawdown_pct",
+        "pre_drawdown_prev",
+        "pre_dd_delta",
+        "pre_dd_velocity",
         "pre_mom1",
         "pre_mom2",
         "pre_mom3",
@@ -366,11 +422,16 @@ def build_artifacts() -> DashboardArtifacts:
         "pre_ratio_mean",
         "pre_recent_dd",
         "pre_span_yr",
+        "dt_gap_yr",
+        "pre_consec_drops",
+        "pre_range_pos",
+        "pre_volatility",
     ]:
         df[col] = df["player_id"].map(lambda pid, c=col: lag_feats.get(pid, {}).get(c, 0.0))
 
     df["age_past_peak"] = df["age"].astype(float) - df["age_at_peak"].astype(float)
     df["years_past_peak"] = df["career_span_years"].astype(float) - df["years_to_peak"].astype(float)
+    df["last_gap_yr"] = np.maximum(0.0, df["career_span_years"].astype(float) - df["pre_span_yr"])
 
     # Top N nationalities (excluding missing)
     nat_series = df["nationality"].fillna("").astype(str).str.strip()
