@@ -15,6 +15,12 @@ import {
   type SimulateResponse,
 } from "@/lib/api";
 import { fmt, trajectoryLabel } from "@/lib/format";
+import {
+  CONTINENT_COUNTRIES,
+  LEAGUE_CATALOG,
+  findContinentForCountry,
+  getCountryFlag,
+} from "@/lib/geo";
 
 const LEAGUES = ["Premier League", "La Liga", "Serie A", "Bundesliga", "Ligue 1"] as const;
 
@@ -102,6 +108,8 @@ export function ScoutingSimulatorPanel() {
   const [playerSearch, setPlayerSearch] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [loadedPlayer, setLoadedPlayer] = useState<DatasetPlayerRow | null>(null);
+  const [selectedClub, setSelectedClub] = useState<string>("Arsenal FC");
+  const [selectedContinent, setSelectedContinent] = useState<string>("Eropa");
   const didMount = useRef(false);
 
   const datasets = useApi<DatasetsResponse>("/datasets");
@@ -161,6 +169,9 @@ export function ScoutingSimulatorPanel() {
   const loadPreset = (data: SimulateRequest) => {
     setLoadedPlayer(null);
     setForm(data);
+    setSelectedContinent(findContinentForCountry(data.nationality));
+    const cat = LEAGUE_CATALOG.find((l) => l.league === data.league_name);
+    if (cat?.clubs.length) setSelectedClub(cat.clubs[0]);
     if (!autoPredict) sim.mutate(data);
   };
 
@@ -168,10 +179,18 @@ export function ScoutingSimulatorPanel() {
     const req = playerToSimRequest(p);
     setLoadedPlayer(p);
     setForm(req);
+    setSelectedContinent(findContinentForCountry(req.nationality));
+    if (p.peak_club) setSelectedClub(p.peak_club);
     setPickerOpen(false);
     setPlayerSearch("");
     if (!autoPredict) sim.mutate(req);
   };
+
+  const activeLeagueCat =
+    LEAGUE_CATALOG.find((l) => l.league === form.league_name) ?? LEAGUE_CATALOG[0];
+  const activeContinentCountries =
+    CONTINENT_COUNTRIES.find((c) => c.continent === selectedContinent)?.countries ??
+    CONTINENT_COUNTRIES[0].countries;
 
   const peakMillions = Math.round((form.peak_value_eur / 1_000_000) * 10) / 10;
   const firstMillions = Math.round((form.first_value_eur / 1_000_000) * 10) / 10;
@@ -279,24 +298,124 @@ export function ScoutingSimulatorPanel() {
             </label>
           </div>
 
-          {/* League Visual Selector */}
-          <div>
-            <span className="text-xs font-semibold text-[#94A3B8]">Kompetisi / Liga</span>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {LEAGUES.map((lg) => {
-                const active = form.league_name === lg;
+          {/* League Country -> Club Selector */}
+          <div className="space-y-3 rounded-lg border border-[#1E293B] bg-[#0B1117] p-3.5">
+            <div>
+              <span className="text-xs font-semibold text-[#94A3B8]">
+                1. Negara Liga &amp; Kompetisi
+              </span>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {LEAGUE_CATALOG.map((cat) => {
+                  const active = form.league_name === cat.league;
+                  return (
+                    <button
+                      key={cat.league}
+                      type="button"
+                      onClick={() => {
+                        updateField("league_name", cat.league);
+                        if (cat.clubs.length && !cat.clubs.includes(selectedClub)) {
+                          setSelectedClub(cat.clubs[0]);
+                        }
+                      }}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+                        active
+                          ? "border-[#10B981] bg-[#10B981]/15 text-[#F1F5F9]"
+                          : "border-[#243244] bg-[#121A24] text-[#94A3B8] hover:text-[#F1F5F9]"
+                      }`}
+                    >
+                      <span>{cat.flag}</span>
+                      <LeagueBadge league={cat.league} size={14} showName={false} />
+                      <span>{cat.country}</span>
+                      <span className="text-[10px] opacity-70">({cat.league})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 border-t border-[#1E293B] pt-3">
+              <div className="min-w-[200px] flex-1">
+                <span className="block text-[11px] font-semibold text-[#94A3B8]">
+                  Klub di {activeLeagueCat.country} ({activeLeagueCat.league})
+                </span>
+                <select
+                  value={
+                    activeLeagueCat.clubs.includes(selectedClub)
+                      ? selectedClub
+                      : activeLeagueCat.clubs[0]
+                  }
+                  onChange={(e) => setSelectedClub(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-[#243244] bg-[#121A24] px-3 py-1.5 text-xs text-[#F1F5F9]"
+                >
+                  {activeLeagueCat.clubs.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg border border-[#243244] bg-[#121A24] px-3 py-2 text-xs font-semibold text-[#F1F5F9]">
+                <ClubBadge club={selectedClub} size={18} />
+              </div>
+            </div>
+          </div>
+
+          {/* Nationality by Continent -> Country + Flag */}
+          <div className="space-y-3 rounded-lg border border-[#1E293B] bg-[#0B1117] p-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-[#94A3B8]">
+                2. Kebangsaan Pemain (Pilih Benua → Negara)
+              </span>
+              <span className="rounded bg-[#121A24] px-2 py-0.5 text-xs font-bold text-[#F1F5F9]">
+                {getCountryFlag(form.nationality)} {form.nationality}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              {CONTINENT_COUNTRIES.map((group) => {
+                const active = selectedContinent === group.continent;
                 return (
                   <button
-                    key={lg}
+                    key={group.continent}
                     type="button"
-                    onClick={() => updateField("league_name", lg)}
-                    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                    onClick={() => {
+                      setSelectedContinent(group.continent);
+                      if (
+                        !group.countries.some(
+                          (c) => c.name.toLowerCase() === form.nationality.toLowerCase(),
+                        )
+                      ) {
+                        updateField("nationality", group.countries[0].name);
+                      }
+                    }}
+                    className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold transition ${
                       active
-                        ? "border-[#10B981] bg-[#10B981]/15 text-[#F1F5F9]"
-                        : "border-[#243244] bg-[#0B1117] text-[#94A3B8] hover:text-[#F1F5F9]"
+                        ? "border-[#10B981] bg-[#10B981]/15 text-[#10B981]"
+                        : "border-[#243244] bg-[#121A24] text-[#94A3B8] hover:text-[#F1F5F9]"
                     }`}
                   >
-                    <LeagueBadge league={lg} size={14} />
+                    {group.continent} ({group.countries.length})
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid max-h-36 grid-cols-2 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-3">
+              {activeContinentCountries.map((c) => {
+                const active = form.nationality.toLowerCase() === c.name.toLowerCase();
+                return (
+                  <button
+                    key={c.name}
+                    type="button"
+                    onClick={() => updateField("nationality", c.name)}
+                    className={`flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-left text-xs transition ${
+                      active
+                        ? "border-[#10B981] bg-[#10B981]/15 font-bold text-[#F1F5F9]"
+                        : "border-[#1E293B] bg-[#121A24] text-[#94A3B8] hover:border-[#243244] hover:text-[#F1F5F9]"
+                    }`}
+                  >
+                    <span className="shrink-0 text-sm leading-none">{c.flag}</span>
+                    <span className="truncate">{c.name}</span>
                   </button>
                 );
               })}
@@ -434,12 +553,12 @@ export function ScoutingSimulatorPanel() {
               onClick={() => setShowAdvanced((s) => !s)}
               className="flex w-full items-center justify-between px-3.5 py-2.5 text-xs font-semibold text-[#94A3B8] hover:text-[#F1F5F9]"
             >
-              <span>Parameter Lanjutan (Volatilitas, Klub, Kebangsaan)</span>
+              <span>Parameter Lanjutan (Volatilitas, Titik Valuasi, Jumlah Klub)</span>
               {showAdvanced ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
             </button>
 
             {showAdvanced ? (
-              <div className="grid gap-3 border-t border-[#1E293B] p-3.5 sm:grid-cols-2">
+              <div className="grid gap-3 border-t border-[#1E293B] p-3.5 sm:grid-cols-3">
                 <label className="block text-xs">
                   <span className="font-semibold text-[#94A3B8]">
                     Volatilitas Nilai ({form.value_volatility.toFixed(2)})
@@ -475,15 +594,6 @@ export function ScoutingSimulatorPanel() {
                     max={15}
                     value={form.num_clubs_career}
                     onChange={(e) => updateField("num_clubs_career", Number(e.target.value) || 1)}
-                    className="mt-1 w-full rounded-lg border border-[#243244] bg-[#121A24] px-3 py-1.5 text-sm text-[#F1F5F9]"
-                  />
-                </label>
-
-                <label className="block text-xs">
-                  <span className="font-semibold text-[#94A3B8]">Kebangsaan</span>
-                  <input
-                    value={form.nationality}
-                    onChange={(e) => updateField("nationality", e.target.value)}
                     className="mt-1 w-full rounded-lg border border-[#243244] bg-[#121A24] px-3 py-1.5 text-sm text-[#F1F5F9]"
                   />
                 </label>
