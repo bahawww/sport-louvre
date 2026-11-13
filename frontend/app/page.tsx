@@ -85,7 +85,7 @@ export default function DashboardPage() {
             {tab === "errors" && <ErrorAnalysisPanel overview={overview.data} preds={preds.data} />}
             {tab === "history" && <TrajectoryExplorerPanel />}
             {tab === "simulator" && <ScoutingSimulatorPanel />}
-            {tab === "recommendations" && <RecommendationsPanel preds={preds.data} />}
+            {tab === "recommendations" && <RecommendationsPanel preds={preds.data} overview={overview.data} />}
             {tab === "datasets" && <DatasetPanel />}
             {tab === "penjelasan" && <PenjelasanPanel overview={overview.data} />}
           </>

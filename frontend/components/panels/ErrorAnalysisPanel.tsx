@@ -62,9 +62,9 @@ export function ErrorAnalysisPanel({
             +{(ea.leakage_delta_acc * 100).toFixed(1)} pp
           </p>
           <p className="mt-2 text-xs leading-relaxed text-[#94A3B8]">
-            Memasukkan <code>value_cagr</code>, <code>post_peak_decline_pct</code>, dan{" "}
-            <code>value_multiplier_x</code> membuat model seolah 100% akurat, padahal fitur tersebut
-            baru ada setelah valuasi akhir terjadi.
+            Memasukkan <code>is_at_peak</code>, <code>post_peak_decline_pct</code>, dan{" "}
+            <code>value_cagr</code> membuat model seolah 100% akurat, padahal kolom tersebut dihitung
+            dari valuasi yang sedang ditebak.
           </p>
         </div>
 
@@ -75,7 +75,8 @@ export function ErrorAnalysisPanel({
           </p>
           <p className="mt-2 text-xs leading-relaxed text-[#94A3B8]">
             Pemain yang masih naik perlahan (<code>growing</code>) dan yang sudah mendatar (
-            <code>stable</code>) memiliki profil umur & nilai puncak yang tumpang tindih pada Mode Clean.
+            <code>stable</code>) dipisahkan ambang drawdown 20%, sehingga satu update kecil bisa
+            memindahkan kelas.
           </p>
         </div>
 

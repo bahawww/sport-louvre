@@ -11,6 +11,7 @@ import {
   useApi,
   type DatasetPlayerRow,
   type DatasetsResponse,
+  type ProfileForm,
   type SimulateRequest,
   type SimulateResponse,
 } from "@/lib/api";
@@ -24,7 +25,22 @@ import {
 
 const LEAGUES = ["Premier League", "La Liga", "Serie A", "Bundesliga", "Ligue 1"] as const;
 
-const PRESETS: { label: string; subtitle: string; data: SimulateRequest }[] = [
+const POSITION_GROUPS = ["Forward", "Midfielder", "Defender", "Goalkeeper"] as const;
+const POSITION_LABEL: Record<string, string> = {
+  Forward: "Penyerang",
+  Midfielder: "Gelandang",
+  Defender: "Bek",
+  Goalkeeper: "Kiper",
+};
+const DEFAULT_HORIZON_MONTHS = 5;
+
+interface PlayerScenario {
+  horizonMonths: number;
+  shockPct: number;
+  league: string;
+}
+
+const PRESETS: { label: string; subtitle: string; data: ProfileForm }[] = [
   {
     label: "Wonderkid (21 thn)",
     subtitle: "Naik daun · €45M peak",
@@ -37,7 +53,7 @@ const PRESETS: { label: string; subtitle: string; data: SimulateRequest }[] = [
       years_to_peak: 3.0,
       value_volatility: 0.65,
       num_valuation_points: 10,
-      num_clubs_career: 2,
+      position_group: "Forward",
       league_name: "Premier League",
       nationality: "England",
     },
@@ -54,7 +70,7 @@ const PRESETS: { label: string; subtitle: string; data: SimulateRequest }[] = [
       years_to_peak: 6.5,
       value_volatility: 0.45,
       num_valuation_points: 20,
-      num_clubs_career: 3,
+      position_group: "Midfielder",
       league_name: "La Liga",
       nationality: "Spain",
     },
@@ -71,38 +87,63 @@ const PRESETS: { label: string; subtitle: string; data: SimulateRequest }[] = [
       years_to_peak: 8.0,
       value_volatility: 0.55,
       num_valuation_points: 28,
-      num_clubs_career: 4,
+      position_group: "Defender",
       league_name: "Serie A",
       nationality: "Italy",
     },
   },
 ];
 
-function playerToSimRequest(p: DatasetPlayerRow): SimulateRequest {
+/** Prefill the synthetic form with the player's real career summary from the dataset. */
+function playerToProfile(p: DatasetPlayerRow): ProfileForm {
   const age = p.age ?? 25;
-  const span = Math.max(1, Number((p.career_span_years || 4).toFixed(1)));
-  const atPeak = p.current_value_eur >= p.peak_value_eur * 0.95;
-  const ageAtPeak = atPeak ? age : Math.max(18, Math.round((age - Math.min(3, span * 0.35)) * 2) / 2);
-  const yearsToPeak = Math.max(0.5, Number((span - Math.max(0, age - ageAtPeak)).toFixed(1)));
+  const span = Math.max(0.5, Number((p.career_span_years || 4).toFixed(1)));
   return {
     age,
-    age_at_peak: ageAtPeak,
+    age_at_peak: Math.min(age, p.age_at_peak ?? age),
     peak_value_eur: Math.max(1_000_000, p.peak_value_eur),
     first_value_eur: Math.max(250_000, p.first_value_eur || 1_000_000),
     career_span_years: span,
-    years_to_peak: yearsToPeak,
-    value_volatility: 0.5,
-    num_valuation_points: Math.max(3, p.num_valuation_points || 12),
-    num_clubs_career: 3,
+    years_to_peak: Math.min(span, Number((p.years_to_peak ?? span).toFixed(1))),
+    value_volatility: Number((p.value_volatility ?? 0.7).toFixed(2)),
+    num_valuation_points: Math.max(2, p.num_valuation_points || 12),
     league_name: LEAGUES.includes(p.league_name as (typeof LEAGUES)[number])
       ? p.league_name
       : "Premier League",
     nationality: p.nationality || "England",
+    position_group: POSITION_GROUPS.includes(p.position_group as (typeof POSITION_GROUPS)[number])
+      ? p.position_group
+      : undefined,
+  };
+}
+
+function buildPayload(
+  form: ProfileForm,
+  player: DatasetPlayerRow | null,
+  sc: PlayerScenario,
+): SimulateRequest {
+  if (!player) return form;
+  return {
+    player_id: player.player_id,
+    scenario: {
+      horizon_years:
+        sc.horizonMonths === DEFAULT_HORIZON_MONTHS ? undefined : sc.horizonMonths / 12,
+      league_name: sc.league !== player.league_name ? sc.league : undefined,
+      append_valuations:
+        sc.shockPct !== 0
+          ? [{ value_eur: player.current_value_eur * (1 + sc.shockPct / 100), years_after: 0.5 }]
+          : [],
+    },
   };
 }
 
 export function ScoutingSimulatorPanel() {
-  const [form, setForm] = useState<SimulateRequest>(PRESETS[0].data);
+  const [form, setForm] = useState<ProfileForm>(PRESETS[0].data);
+  const [scenario, setScenario] = useState<PlayerScenario>({
+    horizonMonths: DEFAULT_HORIZON_MONTHS,
+    shockPct: 0,
+    league: "Premier League",
+  });
   const [autoPredict, setAutoPredict] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [playerSearch, setPlayerSearch] = useState("");
@@ -123,20 +164,25 @@ export function ScoutingSimulatorPanel() {
       }),
   });
 
-  // Auto-run once on mount + live debounced prediction when sliders change
+  const payload = useMemo(
+    () => buildPayload(form, loadedPlayer, scenario),
+    [form, loadedPlayer, scenario],
+  );
+
+  // Auto-run once on mount + live debounced prediction when inputs change
   useEffect(() => {
     if (!didMount.current) {
       didMount.current = true;
-      sim.mutate(form);
+      sim.mutate(payload);
       return;
     }
     if (!autoPredict) return;
     const t = setTimeout(() => {
-      sim.mutate(form);
+      sim.mutate(payload);
     }, 280);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form, autoPredict]);
+  }, [payload, autoPredict]);
 
   const matchingPlayers = useMemo(() => {
     const list = datasets.data?.players ?? [];
@@ -152,7 +198,7 @@ export function ScoutingSimulatorPanel() {
       .slice(0, 12);
   }, [datasets.data, playerSearch]);
 
-  const updateField = <K extends keyof SimulateRequest>(key: K, val: SimulateRequest[K]) => {
+  const updateField = <K extends keyof ProfileForm>(key: K, val: ProfileForm[K]) => {
     setForm((prev) => {
       const next = { ...prev, [key]: val };
       // Keep age_at_peak <= age automatically for sensible UX
@@ -166,7 +212,7 @@ export function ScoutingSimulatorPanel() {
     });
   };
 
-  const loadPreset = (data: SimulateRequest) => {
+  const loadPreset = (data: ProfileForm) => {
     setLoadedPlayer(null);
     setForm(data);
     setSelectedContinent(findContinentForCountry(data.nationality));
@@ -175,29 +221,43 @@ export function ScoutingSimulatorPanel() {
     if (!autoPredict) sim.mutate(data);
   };
 
+  const releasePlayer = () => {
+    setLoadedPlayer(null);
+    if (!autoPredict) sim.mutate(form);
+  };
+
   const loadRealPlayer = (p: DatasetPlayerRow) => {
-    const req = playerToSimRequest(p);
+    const req = playerToProfile(p);
+    const sc = { horizonMonths: DEFAULT_HORIZON_MONTHS, shockPct: 0, league: req.league_name };
     setLoadedPlayer(p);
+    setScenario(sc);
     setForm(req);
     setSelectedContinent(findContinentForCountry(req.nationality));
     if (p.peak_club) setSelectedClub(p.peak_club);
     setPickerOpen(false);
     setPlayerSearch("");
-    if (!autoPredict) sim.mutate(req);
+    if (!autoPredict) sim.mutate(buildPayload(req, p, sc));
+  };
+
+  const activeLeague = loadedPlayer ? scenario.league : form.league_name;
+  const setLeague = (league: string) => {
+    if (loadedPlayer) setScenario((prev) => ({ ...prev, league }));
+    else updateField("league_name", league);
   };
 
   const activeLeagueCat =
-    LEAGUE_CATALOG.find((l) => l.league === form.league_name) ?? LEAGUE_CATALOG[0];
+    LEAGUE_CATALOG.find((l) => l.league === activeLeague) ?? LEAGUE_CATALOG[0];
   const activeContinentCountries =
     CONTINENT_COUNTRIES.find((c) => c.continent === selectedContinent)?.countries ??
     CONTINENT_COUNTRIES[0].countries;
 
   const peakMillions = Math.round((form.peak_value_eur / 1_000_000) * 10) / 10;
   const firstMillions = Math.round((form.first_value_eur / 1_000_000) * 10) / 10;
+  const refPeak = loadedPlayer ? loadedPlayer.peak_value_eur : form.peak_value_eur;
   const estPctOfPeak =
-    sim.data && form.peak_value_eur > 0
-      ? Math.round((sim.data.predicted_value_eur / form.peak_value_eur) * 100)
-      : null;
+    sim.data && refPeak > 0 ? Math.round((sim.data.predicted_value_eur / refPeak) * 100) : null;
+  const levelPct = Math.round((sim.data?.interval_level ?? 0.8) * 100);
+  const isPlayerMode = loadedPlayer !== null;
 
   return (
     <div className="space-y-5">
@@ -278,15 +338,19 @@ export function ScoutingSimulatorPanel() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            sim.mutate(form);
+            sim.mutate(payload);
           }}
           className="space-y-5 rounded-xl border border-[#243244] bg-[#121A24] p-5"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-base font-bold text-[#F1F5F9]">What-If Scouting Simulator</h3>
+              <h3 className="text-base font-bold text-[#F1F5F9]">
+                {isPlayerMode ? `What-If: ${loadedPlayer.name}` : "Profil Sintetis"}
+              </h3>
               <p className="mt-0.5 text-xs text-[#94A3B8]">
-                Geser slider untuk menguji skenario usia, nilai puncak, dan liga pemain.
+                {isPlayerMode
+                  ? "Fitur dihitung dari riwayat valuasi asli pemain, sama persis dengan pipeline training."
+                  : "Model khusus yang hanya dilatih pada kolom di form ini, jadi tidak ada fitur tebakan."}
               </p>
             </div>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[#243244] bg-[#0B1117] px-2.5 py-1.5 text-[11px] font-semibold text-[#F1F5F9]">
@@ -304,17 +368,17 @@ export function ScoutingSimulatorPanel() {
           <div className="space-y-3 rounded-lg border border-[#1E293B] bg-[#0B1117] p-3.5">
             <div>
               <span className="text-xs font-semibold text-[#94A3B8]">
-                1. Negara Liga &amp; Kompetisi
+                {isPlayerMode ? "Skenario Pindah Liga" : "1. Negara Liga & Kompetisi"}
               </span>
               <div className="mt-2 flex flex-wrap gap-2">
                 {LEAGUE_CATALOG.map((cat) => {
-                  const active = form.league_name === cat.league;
+                  const active = activeLeague === cat.league;
                   return (
                     <button
                       key={cat.league}
                       type="button"
                       onClick={() => {
-                        updateField("league_name", cat.league);
+                        setLeague(cat.league);
                         if (cat.clubs.length && !cat.clubs.includes(selectedClub)) {
                           setSelectedClub(cat.clubs[0]);
                         }
@@ -335,6 +399,8 @@ export function ScoutingSimulatorPanel() {
               </div>
             </div>
 
+            {isPlayerMode ? null : (
+              <>
             <div className="flex flex-wrap items-center gap-3 border-t border-[#1E293B] pt-3">
               <div className="min-w-[200px] flex-1">
                 <span className="block text-[11px] font-semibold text-[#94A3B8]">
@@ -360,8 +426,64 @@ export function ScoutingSimulatorPanel() {
                 <ClubBadge club={selectedClub} size={18} />
               </div>
             </div>
+                <p className="text-[10px] text-[#64748B]">
+                  Klub hanya tampilan: riwayat klub di dataset tidak layak dipakai model.
+                </p>
+              </>
+            )}
           </div>
 
+          {isPlayerMode ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-lg border border-[#1E293B] bg-[#0B1117] p-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-[#94A3B8]">Jarak ke Update Berikutnya</span>
+                  <span className="font-bold text-[#F1F5F9]">{scenario.horizonMonths} bulan</span>
+                </div>
+                <input
+                  type="range"
+                  min={2}
+                  max={18}
+                  step={1}
+                  value={scenario.horizonMonths}
+                  onChange={(e) =>
+                    setScenario((prev) => ({ ...prev, horizonMonths: Number(e.target.value) }))
+                  }
+                  className="mt-2.5 w-full accent-[#10B981]"
+                />
+                <p className="mt-1 text-[10px] text-[#64748B]">
+                  Usia ikut bertambah. 99% jarak antar-update di data di bawah 12 bulan.
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-[#1E293B] bg-[#0B1117] p-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-[#94A3B8]">Valuasi Hipotetis +6 Bulan</span>
+                  <span className="font-bold text-[#F59E0B]">
+                    {scenario.shockPct === 0
+                      ? "tidak ada"
+                      : `${scenario.shockPct > 0 ? "+" : ""}${scenario.shockPct}%`}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={-60}
+                  max={100}
+                  step={5}
+                  value={scenario.shockPct}
+                  onChange={(e) =>
+                    setScenario((prev) => ({ ...prev, shockPct: Number(e.target.value) }))
+                  }
+                  className="mt-2.5 w-full accent-[#F59E0B]"
+                />
+                <p className="mt-1 text-[10px] text-[#64748B]">
+                  Menambah satu titik ke riwayat, lalu momentum, drawdown, dan volatilitas dihitung
+                  ulang.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <>
           {/* Nationality by Continent -> Country + Flag */}
           <div className="space-y-3 rounded-lg border border-[#1E293B] bg-[#0B1117] p-3.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -421,6 +543,26 @@ export function ScoutingSimulatorPanel() {
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-[#1E293B] bg-[#0B1117] p-3.5">
+            <span className="text-xs font-semibold text-[#94A3B8]">3. Kelompok Posisi</span>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {POSITION_GROUPS.map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => updateField("position_group", g)}
+                  className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+                    form.position_group === g
+                      ? "border-[#10B981] bg-[#10B981]/15 text-[#F1F5F9]"
+                      : "border-[#243244] bg-[#121A24] text-[#94A3B8] hover:text-[#F1F5F9]"
+                  }`}
+                >
+                  {POSITION_LABEL[g]}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -555,12 +697,12 @@ export function ScoutingSimulatorPanel() {
               onClick={() => setShowAdvanced((s) => !s)}
               className="flex w-full items-center justify-between px-3.5 py-2.5 text-xs font-semibold text-[#94A3B8] hover:text-[#F1F5F9]"
             >
-              <span>Parameter Lanjutan (Volatilitas, Titik Valuasi, Jumlah Klub)</span>
+              <span>Parameter Lanjutan (Volatilitas, Titik Valuasi)</span>
               {showAdvanced ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
             </button>
 
             {showAdvanced ? (
-              <div className="grid gap-3 border-t border-[#1E293B] p-3.5 sm:grid-cols-3">
+              <div className="grid gap-3 border-t border-[#1E293B] p-3.5 sm:grid-cols-2">
                 <label className="block text-xs">
                   <span className="font-semibold text-[#94A3B8]">
                     Volatilitas Nilai ({form.value_volatility.toFixed(2)})
@@ -588,20 +730,11 @@ export function ScoutingSimulatorPanel() {
                   />
                 </label>
 
-                <label className="block text-xs">
-                  <span className="font-semibold text-[#94A3B8]">Jumlah Klub Sepanjang Karir</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={15}
-                    value={form.num_clubs_career}
-                    onChange={(e) => updateField("num_clubs_career", Number(e.target.value) || 1)}
-                    className="mt-1 w-full rounded-lg border border-[#243244] bg-[#121A24] px-3 py-1.5 text-sm text-[#F1F5F9]"
-                  />
-                </label>
               </div>
             ) : null}
           </div>
+            </>
+          )}
 
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -620,6 +753,15 @@ export function ScoutingSimulatorPanel() {
               <RotateCcw className="size-3.5" />
               Reset
             </button>
+            {isPlayerMode ? (
+              <button
+                type="button"
+                onClick={releasePlayer}
+                className="rounded-lg border border-[#243244] bg-[#0B1117] px-3 py-2.5 text-xs font-semibold text-[#94A3B8] hover:text-[#F1F5F9]"
+              >
+                Pakai sebagai Profil Sintetis
+              </button>
+            ) : null}
           </div>
         </form>
 
@@ -679,15 +821,60 @@ export function ScoutingSimulatorPanel() {
               </div>
 
               <div>
-                <p className="text-xs text-[#94A3B8]">Estimasi Current Value</p>
+                <p className="text-xs text-[#94A3B8]">
+                  {isPlayerMode
+                    ? "Prakiraan Nilai di Update Berikutnya"
+                    : "Estimasi Nilai dari Profil"}
+                </p>
                 <p className="mt-1 text-3xl font-extrabold text-[#10B981]">
                   {fmt.eur(sim.data.predicted_value_eur)}
                 </p>
                 <p className="mt-1 text-xs text-[#94A3B8]">
-                  Rentang wajar: {fmt.eur(sim.data.value_range_eur[0])} –{" "}
+                  Interval konformal {levelPct}%: {fmt.eur(sim.data.value_range_eur[0])} –{" "}
                   {fmt.eur(sim.data.value_range_eur[1])}
                 </p>
+                {sim.data.baseline && sim.data.scenario_delta_eur !== undefined ? (
+                  <p className="mt-1 text-xs text-[#94A3B8]">
+                    Tanpa skenario: {fmt.eur(sim.data.baseline.predicted_value_eur)} · selisih{" "}
+                    <strong
+                      className={
+                        sim.data.scenario_delta_eur >= 0 ? "text-[#10B981]" : "text-[#EF4444]"
+                      }
+                    >
+                      {sim.data.scenario_delta_eur >= 0 ? "+" : ""}
+                      {fmt.eur(sim.data.scenario_delta_eur)}
+                    </strong>
+                  </p>
+                ) : null}
               </div>
+
+              {sim.data.fair_value_eur !== undefined && sim.data.fair_value_range_eur ? (
+                <div className="rounded-lg border border-[#243244] bg-[#0B1117] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-[#94A3B8]">Nilai Wajar Fundamental</p>
+                    {sim.data.valuation_status ? (
+                      <span
+                        className={`rounded px-2 py-0.5 text-[11px] font-bold ${
+                          sim.data.valuation_status === "Undervalued"
+                            ? "bg-[#10B981]/15 text-[#10B981]"
+                            : sim.data.valuation_status === "Overvalued"
+                              ? "bg-[#EF4444]/15 text-[#EF4444]"
+                              : "bg-[#243244] text-[#94A3B8]"
+                        }`}
+                      >
+                        {sim.data.valuation_status}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-lg font-extrabold text-[#F1F5F9]">
+                    {fmt.eur(sim.data.fair_value_eur)}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-[#94A3B8]">
+                    Interval {levelPct}%: {fmt.eur(sim.data.fair_value_range_eur[0])} –{" "}
+                    {fmt.eur(sim.data.fair_value_range_eur[1])}. Tanpa harga 12 bulan terakhir.
+                  </p>
+                </div>
+              ) : null}
 
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-[#94A3B8]">Probabilitas Kelas</p>
@@ -713,7 +900,23 @@ export function ScoutingSimulatorPanel() {
                 <strong className="text-[#F59E0B]">Scouting Verdict:</strong>{" "}
                 {sim.data.scouting_verdict}
               </div>
+
+              {sim.data.warnings?.length ? (
+                <ul className="space-y-1 text-[11px] text-[#F59E0B]">
+                  {sim.data.warnings.map((w) => (
+                    <li key={w}>⚠ {w}</li>
+                  ))}
+                </ul>
+              ) : null}
+
+              {sim.data.models ? (
+                <p className="text-[10px] text-[#64748B]">
+                  Model: {Object.values(sim.data.models).join(" · ")}
+                </p>
+              ) : null}
             </div>
+          ) : sim.isError ? (
+            <p className="mt-4 text-xs text-[#EF4444]">Prediksi gagal: {sim.error.message}</p>
           ) : (
             <p className="mt-4 text-xs text-[#94A3B8]">Memuat prediksi awal...</p>
           )}

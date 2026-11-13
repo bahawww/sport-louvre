@@ -22,6 +22,11 @@ export interface ClassificationModelMetrics {
   recall_weighted: number;
   confusion_matrix: number[][];
   feature_importance: FeatureImportanceItem[];
+  macro_f1?: number;
+  ece?: number;
+  brier?: number;
+  log_loss?: number;
+  ordinal_mae?: number;
 }
 
 export interface RegressionModelMetrics {
@@ -30,7 +35,30 @@ export interface RegressionModelMetrics {
   rmse: number;
   r2: number;
   feature_importance: FeatureImportanceItem[];
+  mae_log?: number;
+  rmse_log?: number;
+  r2_log?: number;
+  medape?: number;
 }
+
+export interface IntervalReport {
+  level: number;
+  coverage: number;
+  median_width_ratio: number;
+  n: number;
+}
+
+export interface RegressionTask {
+  models: RegressionModelMetrics[];
+  best_model: string;
+  features: string[];
+  validation: { group_kfold: Record<string, Record<string, number>> };
+  intervals: { method: string; holdout: IntervalReport; q_hat_log: number; n_calibration: number };
+  tautology_probe?: { question: string; r2_log: number; medape: number };
+  reference_naive_last_value?: Record<string, number>;
+}
+
+export type RegressionTaskName = "forecast" | "fundamental" | "profile";
 
 export interface OverviewResponse {
   dataset: {
@@ -55,6 +83,29 @@ export interface OverviewResponse {
   regression: {
     models: RegressionModelMetrics[];
     best_model: string;
+    task?: string;
+    tasks?: Record<RegressionTaskName, RegressionTask>;
+  };
+  methodology?: {
+    label_rule: string;
+    split: string;
+    panel: string;
+    model_selection: string;
+    out_of_time_cutoff: string;
+    interval_level: number;
+    limits: string[];
+  };
+  out_of_time?: {
+    cutoff: string;
+    train_rows: number;
+    sets: Record<
+      string,
+      {
+        rows: number;
+        classification: Record<string, Record<string, number>>;
+        regression: Record<string, Record<string, Record<string, number>>>;
+      }
+    >;
   };
 }
 
@@ -73,12 +124,39 @@ export interface TestPredictionRow {
   residual_eur: number;
   residual_pct: number;
   valuation_status: "Undervalued" | "Fair" | "Overvalued";
+  position?: string;
+  position_group?: string;
+  valuation_basis?: "ok" | "breakout" | "short_history";
+  fair_value_eur?: number;
+  fair_value_range_eur?: [number, number];
+  previous_value_eur?: number;
+  forecast_value_eur?: number;
+  forecast_range_eur?: [number, number];
+  forecast_residual_eur?: number;
+  pred_trajectory_confidence?: number;
 }
+
+export type ScreeningRow = Omit<
+  TestPredictionRow,
+  "actual_trajectory" | "pred_trajectory_clean" | "pred_trajectory_leakage"
+> &
+  Partial<Pick<TestPredictionRow, "actual_trajectory">>;
 
 export interface TestPredictionsResponse {
   rows: TestPredictionRow[];
   undervalued: TestPredictionRow[];
   overvalued: TestPredictionRow[];
+  screening_all?: {
+    method: string;
+    players: number;
+    metrics: Record<string, number>;
+    status_counts: Record<string, number>;
+    basis_counts?: Record<string, number>;
+    band_coverage?: number;
+    gap_vs_hidden_window_return_corr?: number;
+    undervalued: ScreeningRow[];
+    overvalued: ScreeningRow[];
+  };
   error_analysis: {
     leakage_delta_acc: number;
     growing_vs_stable_confusion_count: number;
@@ -115,7 +193,8 @@ export interface HistoryResponse {
   players: PlayerHistoryItem[];
 }
 
-export interface SimulateRequest {
+/** Synthetic-profile mode: the model is trained on exactly these fields. */
+export interface ProfileForm {
   age: number;
   age_at_peak: number;
   peak_value_eur: number;
@@ -124,17 +203,52 @@ export interface SimulateRequest {
   years_to_peak: number;
   value_volatility: number;
   num_valuation_points: number;
-  num_clubs_career: number;
   league_name: string;
   nationality: string;
+  position_group?: string;
 }
 
-export interface SimulateResponse {
+/** What-if changes for a real player; features are recomputed from the real history. */
+export interface SimulateScenario {
+  horizon_years?: number;
+  league_name?: string;
+  append_valuations?: { value_eur: number; years_after: number }[];
+  backtest?: boolean;
+}
+
+export type SimulateRequest = ProfileForm | { player_id: string; scenario?: SimulateScenario };
+
+export interface SimulatePrediction {
   predicted_trajectory: TrajectoryClass;
   trajectory_probabilities: Record<string, number>;
   predicted_value_eur: number;
   value_range_eur: [number, number];
+  fair_value_eur?: number;
+  fair_value_range_eur?: [number, number];
+}
+
+export interface SimulateResponse extends SimulatePrediction {
   scouting_verdict: string;
+  mode?: "player_whatif" | "player_backtest" | "synthetic_profile";
+  interval_level?: number;
+  horizon_years?: number;
+  models?: Record<string, string>;
+  warnings?: string[];
+  market_value_eur?: number;
+  valuation_gap_eur?: number;
+  valuation_gap_pct?: number;
+  valuation_status?: "Undervalued" | "Fair" | "Overvalued";
+  valuation_basis?: "ok" | "breakout" | "short_history";
+  baseline?: SimulatePrediction & { horizon_years: number };
+  scenario_delta_eur?: number;
+  player?: {
+    player_id: string;
+    name: string;
+    last_value_eur: number;
+    last_date: string;
+    n_history_points: number;
+    in_training_set: boolean;
+  };
 }
 
 export async function fetchApi<T>(path: string, init?: RequestInit): Promise<T> {
@@ -178,6 +292,11 @@ export interface DatasetPlayerRow {
   career_span_years: number;
   num_valuation_points: number;
   trajectory: TrajectoryClass;
+  position?: string;
+  position_group?: string;
+  age_at_peak?: number;
+  years_to_peak?: number;
+  value_volatility?: number;
 }
 
 export interface DatasetsResponse {

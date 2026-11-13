@@ -9,11 +9,14 @@ services:
     restart: unless-stopped
     volumes:
       - ./data/Football_Player_Market_Value_Trajectories:/app/data:ro
+      # Trained models, keyed by a hash of data + pipeline code. Without a matching file the
+      # API trains at startup (~5 min); run deploy/pretrain.sh first to avoid that downtime.
+      - model_cache:/app/cache
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
       interval: 10s
       timeout: 5s
-      start_period: 30s
+      start_period: 600s
       retries: 5
 
   web:
@@ -53,3 +56,4 @@ services:
 
 volumes:
   caddy_data:
+  model_cache:

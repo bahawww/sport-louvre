@@ -24,37 +24,86 @@ All three containers (`api`, `web`, `caddy`) run inside a single Docker Compose 
 
 ---
 
-## 2. Dataset & Data Leakage Audit
+## 2. Dataset & Data Audit
 
-Source dataset (`data/Football_Player_Market_Value_Trajectories/`, mounted read-only at `/app/data`):
-- `transfermarkt_player_values.csv`: **508 players**, **36 columns** across the Big-5 European leagues (`La Liga`, `Premier League`, `Serie A`, `Bundesliga`, `Ligue 1`).
-- `transfermarkt_value_history.csv`: **9,764 historical valuation points** (date, EUR value, club, age at date).
-- `data_dictionary.csv`: Schema & column definitions.
-- `transfermarkt_player_values.parquet`: Compressed columnar copy.
+Source (`data/Football_Player_Market_Value_Trajectories/`, mounted read-only at `/app/data`):
+- `transfermarkt_player_values.csv`: **2,418 players**, 36 columns, Big-5 leagues.
+- `transfermarkt_value_history.csv`: **47,909 valuation points** (date, EUR value, club, age).
+- `player_profile_patch.csv`: sidecar with repaired `position` / `position_group` for legacy rows
+  (written by `scripts/repair_legacy_profiles.py`; the original CSV is not modified).
 
-### Critical Data Findings
-1. **UTF-8 BOM**: CSVs contain `\ufeff` BOM headers and are loaded with `encoding="utf-8-sig"`.
-2. **Direct Target Leakage (`last_value_eur`)**: `last_value_eur == current_value_eur` for all 508 rows; excluded from all models.
-3. **Post-Hoc Trajectory Leakage**: Features such as `value_cagr`, `value_to_peak_cagr`, `value_multiplier_x`, `post_peak_decline_pct`, `mean_yoy_growth_rate`, and `is_at_peak` encode the outcome after valuation occurs.
-   - **Mode Clean** excludes all leakage features (`Logistic Regression` achieves honest **66.67%** accuracy).
-   - **Mode Full Features (Leakage)** includes them (`Gradient Boosting` achieves **100.00%** accuracy, proving `+33.3 pp` artificial inflation).
+### Findings that shape the pipeline
+1. **Label rule.** `trajectory` is a pure function of the last value and the earlier peak:
+   strict new all-time high = `rising_star`, otherwise drawdown `<20 / <30 / <60 / >=60 %`.
+   `features.classify_trajectory` reproduces it for 100% of players, so the label can be
+   computed at every point of the history.
+2. **CSV summary columns contain the target.** `peak_value_eur`, `value_volatility`,
+   `years_to_peak`, `career_span_years` are computed over the full history, last point included.
+   In the previous "Clean" mode `peak_value_eur > pre_peak_value_eur` identified `rising_star`
+   exactly and equalled the regression target for 17.9% of players. No CSV summary column is a
+   model feature any more.
+3. **Legacy 508 rows are damaged.** `position` holds a euro string, `position_group` is "Other",
+   `current_club` holds the nationality, `age` disagrees with the history in 46% of rows.
+   Positions are repaired for 492 rows (16 stay unknown); age comes from the history.
+4. **Club history is unusable.** `num_clubs_career` is 1 for all 1,910 newer rows, so it only
+   marks the data source. It is not a feature, and club-move scenarios are not offered.
+5. **Demonstrated leakage** (`value_cagr`, `post_peak_decline_pct`, `is_at_peak`, ...) is kept
+   only in the Leakage mode, which reaches 100% accuracy.
 
 ---
 
 ## 3. Backend (`backend/`)
 
-- **Framework**: Python 3.12 + FastAPI + Uvicorn (`port 8000`).
-- **ML Pipeline (`ml_pipeline.py`)**:
-  - **Split**: Stratified 80:20 (`406` train / `102` test, `random_state=42`).
-  - **Classification (`trajectory`)**: `RandomForestClassifier`, `GradientBoostingClassifier`, `LogisticRegression` (Clean vs Leakage).
-  - **Regression (`current_value_eur`)**: `RandomForestRegressor`, `GradientBoostingRegressor` (`R² = 0.9108`, `MAE = €5.16M`), `LinearRegression`.
-- **Endpoints (`main.py`)**:
-  - `GET /api/health` — Service & dataset readiness.
-  - `GET /api/overview` — Dataset summary, Clean vs Leakage metrics, Regression benchmarks.
-  - `GET /api/test-predictions` — 102 test rows with residuals, undervalued/overvalued lists, and error analysis.
-  - `GET /api/history` — Searchable player career valuation curves.
-  - `POST /api/simulate` — Real-time What-If scouting inference using the best Clean models.
-  - `GET /api/datasets` & `GET /api/datasets/download/{filename}` — Full dataset browser & whitelisted file downloads.
+Python 3.12, FastAPI, scikit-learn 1.6.
+
+| File | Role |
+|---|---|
+| `features.py` | The only place features are defined. `prefix_features(values, days, ages)` + `assemble_row(...)` for real histories, `profile_row(...)` for the synthetic form. |
+| `ml_pipeline.py` | Data loading and repair, panel building, estimators, evaluation, conformal intervals, artifact cache, inference helpers. |
+| `main.py` | API. `/api/simulate` calls the same feature functions as training. |
+| `report.py` | Prints `reports/metrics_report.md` (before vs after). |
+| `tests/test_pipeline.py` | Leak checks, train/serve equality, API contract. Run with `deploy/test.sh`. |
+
+### Training data
+A panel: for every player and every valuation update, features come from the history *before*
+that update and the target is that update (45,485 rows; training uses target dates >= 2021).
+Targets 2 and 4 updates ahead were tested and rejected: next-update log-RMSE got worse than naive.
+
+### Three regression tasks
+| Task | Sees | Purpose |
+|---|---|---|
+| **Forecast** | Full lag state incl. the last price | Value at the next update. Compared against the naive last-value baseline. |
+| **Fundamental** | Career state as of >= 12 months before the last price, age, position, league | Fair value for undervalued / overvalued screening. Cannot copy the current price. |
+| **Profile** | The ten fields of the simulator form | Synthetic-profile mode, no guessed features. |
+
+All use `HistGradientBoostingRegressor` on `log1p(value)` relative to a per-row anchor.
+
+### Classification
+Ordinal (Frank & Hall) decomposition of the five ordered classes over HistGradientBoosting, each
+cumulative model calibrated isotonic out-of-fold with folds grouped by player. Compared with
+calibrated multinomial HGB, Logistic Regression, Random Forest and a persistence baseline.
+
+### Validation
+- Stratified 80:20 split **by player** (seed 42), scored on each test player's last update.
+- Model selection by GroupKFold(5) on training players, never on the test set.
+- Out-of-time: refit on targets before 2025-01-01, scored on later updates.
+- Intervals: conformalized quantile regression at 80%, calibrated on held-out players.
+
+### Serving
+`build_artifacts()` trains in about 5 minutes and caches the result in the `model_cache` volume,
+keyed by a hash of the data files and pipeline code. With a matching cache the API starts in seconds.
+
+### Known limits
+- No performance data: "fair value" comes from price history, age, position and league only.
+  The gap to the market price correlates about -0.70 with the price move of the hidden 12 months,
+  so the screen ranks reversal candidates; it does not prove mispricing. Breakouts (new all-time
+  high inside the hidden window) and histories under 12 months are labelled and not flagged.
+- Scored rows use the real time gap to the next update. `validation.fixed_horizon` reports the
+  same models without it (macro-F1 0.63 -> 0.58, regression unchanged).
+- On the holdout the forecast model does not beat the naive last-value baseline in euros, and is
+  worse for players worth >= EUR 50M; it wins on the log scale, in grouped CV and out-of-time.
+- `league_name` and `position` are current values reused for past rows.
+- The dataset only holds players active in a top-5 league in 2025 (survivorship).
 
 ---
 
@@ -69,12 +118,18 @@ Source dataset (`data/Football_Player_Market_Value_Trajectories/`, mounted read-
   4. `Tren Karir` (`TrajectoryExplorerPanel`)
   5. `Scouting Simulator` (`ScoutingSimulatorPanel`)
   6. `Rekomendasi Klub` (`RecommendationsPanel`)
-  7. `Dataset Total` (`DatasetPanel` — full 508-player browser & CSV/Parquet downloads)
+  7. `Dataset Total` (`DatasetPanel` — full player browser & CSV/Parquet downloads)
 
 ---
 
 ## 5. Build & Operations
 
-- **Build Images**: `./deploy/build.sh` (uses `docker build --network host` for fast PyPI/npm resolution on this VPS).
-- **Run Stack**: `docker compose up -d`.
-- **Publish DNS & Tunnel**: `./deploy/cloudflare-publish.sh` (idempotent Cloudflare API script).
+```sh
+deploy/build.sh            # build images (host network; bridge BuildKit is slow here)
+deploy/test.sh             # backend tests inside the API image
+deploy/pretrain.sh         # train into the model_cache volume (skip ~5 min of startup training)
+docker compose up -d
+```
+- Publish DNS & tunnel: `./deploy/cloudflare-publish.sh` (idempotent).
+- After changing `features.py`, `ml_pipeline.py` or the data, the cache key changes: run
+  `deploy/pretrain.sh` before `up -d`, or the API trains at startup (healthcheck allows 10 min).

@@ -3,8 +3,18 @@
 import { useMemo } from "react";
 
 import { EChart } from "@/components/chart";
-import type { OverviewResponse, TestPredictionsResponse } from "@/lib/api";
+import type {
+  OverviewResponse,
+  RegressionModelMetrics,
+  TestPredictionsResponse,
+} from "@/lib/api";
 import { fmt, trajectoryLabel } from "@/lib/format";
+
+const TASK_LABEL: Record<string, string> = {
+  forecast: "Forecast (t-1 → t)",
+  fundamental: "Fundamental (nilai wajar)",
+  profile: "Profil sintetis",
+};
 
 export function ArenaPanel({
   overview,
@@ -27,6 +37,14 @@ export function ArenaPanel({
     const ms = overview.regression.models;
     return ms.find((m) => m.name === overview.regression.best_model) ?? ms[0];
   }, [overview]);
+
+  const regTasks = useMemo(
+    () =>
+      overview.regression.tasks
+        ? (Object.entries(overview.regression.tasks) as [string, { models: RegressionModelMetrics[]; best_model: string }][])
+        : ([["forecast", overview.regression]] as [string, { models: RegressionModelMetrics[]; best_model: string }][]),
+    [overview],
+  );
 
   const clsBarOption = useMemo(() => {
     const cleanModels = overview.classification.clean_mode.models;
@@ -121,7 +139,8 @@ export function ArenaPanel({
           <p className="text-xs font-medium text-[#94A3B8]">Clean Classification Best</p>
           <p className="mt-2 text-3xl font-extrabold text-[#10B981]">{fmt.pct(cleanBest.accuracy)}</p>
           <p className="mt-1 text-xs text-[#94A3B8]">
-            {cleanBest.name} · F1 {fmt.pct(cleanBest.f1_weighted)}
+            {cleanBest.name} · Macro-F1 {fmt.pct(cleanBest.macro_f1 ?? cleanBest.f1_weighted)}
+            {cleanBest.ece !== undefined ? ` · ECE ${cleanBest.ece.toFixed(3)}` : ""}
           </p>
         </div>
         <div className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
@@ -134,10 +153,11 @@ export function ArenaPanel({
           </p>
         </div>
         <div className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
-          <p className="text-xs font-medium text-[#94A3B8]">Market Value Regression (R²)</p>
+          <p className="text-xs font-medium text-[#94A3B8]">Forecast Update Berikutnya (R²)</p>
           <p className="mt-2 text-3xl font-extrabold text-[#F1F5F9]">{regBest.r2.toFixed(3)}</p>
           <p className="mt-1 text-xs text-[#94A3B8]">
             {regBest.name} · MAE {fmt.eur(regBest.mae)}
+            {regBest.r2_log !== undefined ? ` · R² log ${regBest.r2_log.toFixed(3)}` : ""}
           </p>
         </div>
         <div className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
@@ -158,7 +178,7 @@ export function ArenaPanel({
             Klasifikasi Trajectory: Mode Clean vs Full Features (Leakage)
           </h3>
           <p className="mt-1 text-xs text-[#94A3B8]">
-            Membuktikan bagaimana fitur bocoran (cagr, decline_pct, multiplier) melambungkan akurasi secara semu.
+            Membuktikan bagaimana kolom bocoran (is_at_peak, decline_pct, cagr) melambungkan akurasi secara semu.
           </p>
           <div className="mt-4">
             <EChart option={clsBarOption} height={280} label="Perbandingan akurasi Clean vs Leakage" />
@@ -180,33 +200,54 @@ export function ArenaPanel({
       </div>
 
       <div className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
-        <h3 className="text-base font-bold text-[#F1F5F9]">Benchmark Regresi (current_value_eur)</h3>
+        <h3 className="text-base font-bold text-[#F1F5F9]">Benchmark Regresi: 3 Tugas Terpisah</h3>
+        <p className="mt-1 text-xs text-[#94A3B8]">
+          Forecast menebak update berikutnya dari harga sebelumnya. Fundamental menaksir nilai wajar
+          tanpa harga 12 bulan terakhir. Profil hanya memakai kolom form simulator.
+        </p>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-[#243244] text-xs text-[#94A3B8]">
               <tr>
-                <th className="py-2 pr-4">Model</th>
-                <th className="py-2 px-4 text-right">R² Score</th>
+                <th className="py-2 pr-4">Tugas</th>
+                <th className="py-2 px-4">Model</th>
+                <th className="py-2 px-4 text-right">R² (€)</th>
+                <th className="py-2 px-4 text-right">R² log</th>
                 <th className="py-2 px-4 text-right">MAE (€)</th>
-                <th className="py-2 pl-4 text-right">RMSE (€)</th>
+                <th className="py-2 px-4 text-right">RMSE (€)</th>
+                <th className="py-2 pl-4 text-right">Median APE</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1E293B]">
-              {overview.regression.models.map((m) => (
-                <tr key={m.name} className={m.name === overview.regression.best_model ? "bg-[#182230]/60" : ""}>
-                  <td className="py-2.5 pr-4 font-semibold text-[#F1F5F9]">
-                    {m.name}{" "}
-                    {m.name === overview.regression.best_model ? (
-                      <span className="ml-2 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] text-emerald-400">
-                        Best
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="py-2.5 px-4 text-right font-bold text-[#10B981]">{m.r2.toFixed(4)}</td>
-                  <td className="py-2.5 px-4 text-right text-[#F1F5F9]">{fmt.eur(m.mae)}</td>
-                  <td className="py-2.5 pl-4 text-right text-[#94A3B8]">{fmt.eur(m.rmse)}</td>
-                </tr>
-              ))}
+              {regTasks.flatMap(([task, block]) =>
+                block.models.map((m) => (
+                  <tr
+                    key={`${task}-${m.name}`}
+                    className={m.name === block.best_model ? "bg-[#182230]/60" : ""}
+                  >
+                    <td className="py-2.5 pr-4 text-xs font-semibold text-[#94A3B8]">
+                      {TASK_LABEL[task] ?? task}
+                    </td>
+                    <td className="py-2.5 px-4 font-semibold text-[#F1F5F9]">
+                      {m.name}{" "}
+                      {m.name === block.best_model ? (
+                        <span className="ml-2 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] text-emerald-400">
+                          Dipakai
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-bold text-[#10B981]">{m.r2.toFixed(4)}</td>
+                    <td className="py-2.5 px-4 text-right text-[#F1F5F9]">
+                      {m.r2_log !== undefined ? m.r2_log.toFixed(4) : "-"}
+                    </td>
+                    <td className="py-2.5 px-4 text-right text-[#F1F5F9]">{fmt.eur(m.mae)}</td>
+                    <td className="py-2.5 px-4 text-right text-[#94A3B8]">{fmt.eur(m.rmse)}</td>
+                    <td className="py-2.5 pl-4 text-right text-[#94A3B8]">
+                      {m.medape !== undefined ? fmt.pct(m.medape) : "-"}
+                    </td>
+                  </tr>
+                )),
+              )}
             </tbody>
           </table>
         </div>

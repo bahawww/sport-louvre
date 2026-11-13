@@ -3,17 +3,28 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-import os
-from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from ml_pipeline import CLEAN_NUM_FEATURES, CAT_FEATURES, DashboardArtifacts, build_artifacts
+from features import DEFAULT_HORIZON_YR
+from ml_pipeline import (
+    HORIZON_WARN_YR,
+    INTERVAL_LEVEL,
+    MAX_HORIZON_YR,
+    DashboardArtifacts,
+    build_artifacts,
+    resolve_data_dir,
+    player_feature_row,
+    predict_feature_row,
+    predict_profile,
+    valuation_status,
+)
 
 artifacts: DashboardArtifacts | None = None
 
@@ -27,7 +38,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title="Transfermarkt Player Trajectory & Valuation API",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -40,18 +51,64 @@ app.add_middleware(
 )
 
 
+PROFILE_FIELDS = [
+    "age",
+    "age_at_peak",
+    "peak_value_eur",
+    "first_value_eur",
+    "career_span_years",
+    "years_to_peak",
+    "value_volatility",
+    "num_valuation_points",
+    "league_name",
+    "nationality",
+]
+
+
+class HypotheticalValuation(BaseModel):
+    value_eur: float = Field(..., gt=0)
+    years_after: float = Field(0.5, gt=0, le=2)
+
+
+class Scenario(BaseModel):
+    """What-if changes for a real player. Applied to raw inputs, then features are recomputed."""
+
+    horizon_years: float | None = Field(None, gt=0, le=MAX_HORIZON_YR)
+    league_name: str | None = None
+    append_valuations: list[HypotheticalValuation] = Field(default_factory=list, max_length=6)
+    backtest: bool = False
+
+
 class SimulateRequest(BaseModel):
-    age: float = Field(..., ge=14, le=45)
-    age_at_peak: float = Field(..., ge=14, le=45)
-    peak_value_eur: float = Field(..., ge=0)
-    first_value_eur: float = Field(..., ge=0)
-    career_span_years: float = Field(..., ge=0)
-    years_to_peak: float = Field(..., ge=0)
-    value_volatility: float = Field(..., ge=0)
-    num_valuation_points: int = Field(..., ge=1)
-    num_clubs_career: int = Field(..., ge=1)
-    league_name: str
-    nationality: str
+    """Two modes.
+
+    player_id set  -> what-if on that player's real valuation history (profile fields ignored).
+    player_id None -> synthetic profile; the ten profile fields below are required.
+    """
+
+    player_id: str | None = None
+    scenario: Scenario | None = None
+
+    age: float | None = Field(None, ge=14, le=45)
+    age_at_peak: float | None = Field(None, ge=14, le=45)
+    peak_value_eur: float | None = Field(None, ge=0)
+    first_value_eur: float | None = Field(None, ge=0)
+    career_span_years: float | None = Field(None, ge=0)
+    years_to_peak: float | None = Field(None, ge=0)
+    value_volatility: float | None = Field(None, ge=0)
+    num_valuation_points: int | None = Field(None, ge=1)
+    num_clubs_career: int | None = Field(None, ge=1)  # accepted for compatibility, not modelled
+    league_name: str | None = None
+    nationality: str | None = None
+    position_group: str | None = None
+
+    @model_validator(mode="after")
+    def _profile_fields_required(self) -> "SimulateRequest":
+        if self.player_id is None:
+            missing = [f for f in PROFILE_FIELDS if getattr(self, f) is None]
+            if missing:
+                raise ValueError(f"profile mode requires: {', '.join(missing)}")
+        return self
 
 
 def _get_artifacts() -> DashboardArtifacts:
@@ -102,7 +159,7 @@ def test_predictions() -> dict[str, Any]:
 def history(
     q: str = Query(default="", description="Search player name, club, or nationality"),
     league: str = Query(default="", description="Filter by league_name"),
-    limit: int = Query(default=30, ge=1, le=508),
+    limit: int = Query(default=30, ge=1, le=3000),
 ) -> dict[str, Any]:
     art = _get_artifacts()
     df = art.players_df
@@ -135,6 +192,8 @@ def history(
                 "current_value_eur": float(row["current_value_eur"]),
                 "peak_value_eur": float(row["peak_value_eur"]),
                 "trajectory": str(row["trajectory"]),
+                "position": str(row["position"]) if pd.notna(row["position"]) else "Unknown",
+                "position_group": str(row["position_group"]) if pd.notna(row["position_group"]) else "Unknown",
                 "history": art.history_by_player.get(pid, []),
             }
         )
@@ -142,111 +201,125 @@ def history(
     return {"players": players}
 
 
+def _gap(fair: float, market: float, fair_range: list[float], row: dict[str, Any]) -> dict[str, Any]:
+    status, basis = valuation_status(market, fair_range[0], fair_range[1], row)
+    return {
+        "valuation_basis": basis,
+        "market_value_eur": round(market, 2),
+        "valuation_gap_eur": round(fair - market, 2),
+        "valuation_gap_pct": round((fair - market) / market * 100.0, 2) if market > 0 else 0.0,
+        "valuation_status": status,
+    }
+
+
+def _simulate_player(art: DashboardArtifacts, req: SimulateRequest) -> dict[str, Any]:
+    pid = req.player_id.strip()
+    if pid not in art.series:
+        raise HTTPException(status_code=404, detail=f"player_id {pid} not found")
+    sc = req.scenario or Scenario()
+    league = (sc.league_name or "").strip() or None
+    warnings: list[str] = []
+    if league and league not in art.overview["dataset"]["leagues"]:
+        raise HTTPException(status_code=422, detail=f"unknown league_name {league}")
+    if sc.backtest and (sc.append_valuations or sc.horizon_years or league):
+        raise HTTPException(status_code=422, detail="backtest cannot be combined with scenario changes")
+    if req.num_clubs_career is not None:
+        warnings.append("num_clubs_career is ignored: club history in the dataset is not usable.")
+
+    appended = [(v.value_eur, v.years_after) for v in sc.append_valuations]
+    try:
+        row, meta = player_feature_row(
+            art, pid, sc.horizon_years, league, appended, backtest=sc.backtest
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    out = predict_feature_row(art, row)
+
+    horizon = float(row["horizon_yr"])
+    if horizon > HORIZON_WARN_YR:
+        warnings.append(
+            f"horizon {horizon:.2f}y is beyond the usual gap between updates (99% < {HORIZON_WARN_YR:.0f}y): extrapolation."
+        )
+    if not row["has_anchor"]:
+        warnings.append("less than 12 months of history: fair value rests on age, position and league only.")
+
+    info = art.players_df.loc[art.players_df["player_id"] == pid].iloc[0]
+    out.update(
+        {
+            "mode": "player_backtest" if sc.backtest else "player_whatif",
+            "player": {
+                "player_id": pid,
+                "name": str(info["name"]),
+                "league_name": str(info["league_name"]),
+                "position": str(info["position"]) if pd.notna(info["position"]) else "Unknown",
+                "in_training_set": pid in art.train_player_ids,
+                "hypothetical_points": len(appended),
+                **meta,
+            },
+            "horizon_years": round(horizon, 3),
+            "interval_level": INTERVAL_LEVEL,
+            "models": {
+                "trajectory": art.model_names["classifier"],
+                "value": art.model_names["forecast"],
+                "fair_value": art.model_names["fundamental"],
+            },
+            "features": {
+                k: (None if isinstance(v, float) and np.isnan(v) else v) for k, v in row.items()
+            },
+            "warnings": warnings,
+        }
+    )
+    out.update(_gap(out["fair_value_eur"], meta["last_value_eur"], out["fair_value_range_eur"], row))
+    if not sc.backtest and (appended or league or sc.horizon_years is not None):
+        base_row, _ = player_feature_row(art, pid)
+        base = predict_feature_row(art, base_row)
+        out["baseline"] = {**base, "horizon_years": DEFAULT_HORIZON_YR}
+        out["scenario_delta_eur"] = round(out["predicted_value_eur"] - base["predicted_value_eur"], 2)
+    out["scouting_verdict"] = _scouting_verdict(
+        out["predicted_trajectory"],
+        out["predicted_value_eur"],
+        float(np.expm1(row["log_peak"])),
+        float(row["age"]),
+    )
+    return out
+
+
+def _simulate_profile(art: DashboardArtifacts, req: SimulateRequest) -> dict[str, Any]:
+    fields = {f: getattr(req, f) for f in PROFILE_FIELDS}
+    fields["league_name"] = req.league_name.strip()
+    fields["position_group"] = (req.position_group or "").strip() or None
+    out = predict_profile(art, fields)
+    warnings: list[str] = []
+    if req.num_clubs_career is not None:
+        warnings.append("num_clubs_career is ignored: club history in the dataset is not usable.")
+    if fields["position_group"] is None:
+        warnings.append("no position_group: prediction averaged over position groups.")
+    out.update(
+        {
+            "mode": "synthetic_profile",
+            "interval_level": INTERVAL_LEVEL,
+            "models": {
+                "trajectory": art.model_names["classifier_profile"],
+                "value": art.model_names["profile"],
+            },
+            "warnings": warnings,
+            "scouting_verdict": _scouting_verdict(
+                out["predicted_trajectory"],
+                out["predicted_value_eur"],
+                float(req.peak_value_eur),
+                float(req.age),
+            ),
+        }
+    )
+    return out
+
+
 @app.post("/api/simulate")
 def simulate(req: SimulateRequest) -> dict[str, Any]:
     art = _get_artifacts()
-    nat = req.nationality.strip()
-    nat_grouped = nat if nat in art.top_nationalities else "Other"
-
-    age_past_peak = float(req.age) - float(req.age_at_peak)
-    years_past_peak = max(0.0, float(req.career_span_years) - float(req.years_to_peak))
-    # Approximate pre-current lag state from profile parameters
-    decay_factor = max(0.25, 1.0 - 0.12 * max(0.0, age_past_peak))
-    pre_last = float(req.peak_value_eur) * decay_factor if age_past_peak > 0.5 else float(req.peak_value_eur) * 0.92
-    pre_prev = pre_last * (0.95 if age_past_peak <= 0.5 else 1.05)
-    pre_peak = float(req.peak_value_eur)
-    pre_drawdown = max(0.0, (pre_peak - pre_last) / max(pre_peak, 1.0))
-    pre_drawdown_prev = max(0.0, (pre_peak - pre_prev) / max(pre_peak, 1.0))
-    pre_dd_delta = pre_drawdown - pre_drawdown_prev
-    dt_gap_yr = 0.5
-    last_gap_yr = max(0.0, float(req.career_span_years) * 0.15)
-    pre_mom1 = (pre_last - pre_prev) / max(pre_prev, 1.0)
-    pre_mom2 = (pre_last - float(req.first_value_eur)) / max(float(req.first_value_eur), 1.0) * 0.25
-    pre_mult = pre_last / max(float(req.first_value_eur), 1.0)
-    is_pre_peak = 1 if pre_last >= pre_peak * 0.95 else 0
-    pre_slope = (pre_last - float(req.first_value_eur)) / max(float(req.num_valuation_points), 2) / max(pre_peak, 1.0)
-
-    pre_span_yr = max(0.5, float(req.career_span_years) * 0.85)
-    pre_cagr = (pre_last / max(float(req.first_value_eur), 1.0)) ** (1.0 / pre_span_yr) - 1.0
-    pre_cagr = max(-0.99, min(10.0, pre_cagr))
-
-    row_dict = {
-        "age": float(req.age),
-        "age_at_peak": float(req.age_at_peak),
-        "age_past_peak": age_past_peak,
-        "years_past_peak": years_past_peak,
-        "peak_value_eur": float(req.peak_value_eur),
-        "first_value_eur": float(req.first_value_eur),
-        "career_span_years": float(req.career_span_years),
-        "years_to_peak": float(req.years_to_peak),
-        "value_volatility": float(req.value_volatility),
-        "num_valuation_points": int(req.num_valuation_points),
-        "num_clubs_career": int(req.num_clubs_career),
-        "ever_100m": int(req.peak_value_eur >= 100_000_000),
-        "ever_50m": int(req.peak_value_eur >= 50_000_000),
-        "ever_10m": int(req.peak_value_eur >= 10_000_000),
-        "pre_last_value_eur": pre_last,
-        "pre_prev_value_eur": pre_prev,
-        "pre_peak_value_eur": pre_peak,
-        "pre_drawdown_pct": pre_drawdown,
-        "pre_drawdown_prev": pre_drawdown_prev,
-        "pre_dd_delta": pre_dd_delta,
-        "pre_dd_velocity": pre_dd_delta / dt_gap_yr,
-        "pre_mom1": pre_mom1,
-        "pre_mom2": pre_mom2,
-        "pre_mom3": pre_mom2 * 1.1,
-        "pre_mom1_ann": pre_mom1 / dt_gap_yr,
-        "pre_multiplier": pre_mult,
-        "is_pre_peak": is_pre_peak,
-        "pre_slope": pre_slope,
-        "pre_cagr": pre_cagr,
-        "pre_ratio_mean": pre_last / max((float(req.first_value_eur) + pre_last) * 0.5, 1.0),
-        "pre_recent_dd": pre_drawdown,
-        "pre_span_yr": pre_span_yr,
-        "dt_gap_yr": dt_gap_yr,
-        "last_gap_yr": last_gap_yr,
-        "pre_consec_drops": 1.0 if age_past_peak > 0.5 else 0.0,
-        "pre_range_pos": (pre_last - float(req.first_value_eur)) / max(pre_peak - float(req.first_value_eur), 1.0),
-        "pre_volatility": float(req.value_volatility),
-        "league_name": req.league_name.strip(),
-        "nationality": nat_grouped,
-    }
-    X_input = pd.DataFrame([row_dict], columns=CLEAN_NUM_FEATURES + CAT_FEATURES)
-
-    pred_traj = str(art.best_clean_clf.predict(X_input)[0])
-    probs_arr = art.best_clean_clf.predict_proba(X_input)[0]
-    classes = art.best_clean_clf.classes_
-    traj_probs = {
-        str(cls): round(float(prob), 4)
-        for cls, prob in zip(classes, probs_arr)
-    }
-
-    pred_val = max(0.0, float(art.best_reg_model.predict(X_input)[0]))
-    margin = max(art.best_reg_mae * 0.65, pred_val * 0.15)
-    low_val = max(0.0, pred_val - margin)
-    high_val = pred_val + margin
-
-    return {
-        "predicted_trajectory": pred_traj,
-        "trajectory_probabilities": traj_probs,
-        "predicted_value_eur": round(pred_val, 2),
-        "value_range_eur": [round(low_val, 2), round(high_val, 2)],
-        "scouting_verdict": _scouting_verdict(
-            pred_traj, pred_val, float(req.peak_value_eur), float(req.age)
-        ),
-    }
-
-
-def _resolve_data_dir() -> Path:
-    candidates = [
-        Path(os.environ.get("DATA_DIR", "/app/data")),
-        Path("/app/data"),
-        Path("/opt/sport-dashboard/data/Football_Player_Market_Value_Trajectories"),
-    ]
-    for p in candidates:
-        if (p / "transfermarkt_player_values.csv").exists():
-            return p
-    raise FileNotFoundError("Dataset directory not found")
+    if req.player_id is not None:
+        return _simulate_player(art, req)
+    return _simulate_profile(art, req)
 
 
 DATASET_CATALOG: dict[str, dict[str, Any]] = {
@@ -280,7 +353,7 @@ DATASET_CATALOG: dict[str, dict[str, Any]] = {
 @app.get("/api/datasets")
 def list_datasets() -> dict[str, Any]:
     art = _get_artifacts()
-    data_dir = _resolve_data_dir()
+    data_dir = resolve_data_dir()
     files: list[dict[str, Any]] = []
     for fname, meta in DATASET_CATALOG.items():
         fpath = data_dir / fname
@@ -316,6 +389,11 @@ def list_datasets() -> dict[str, Any]:
             "career_span_years": float(r["career_span_years"]) if pd.notna(r["career_span_years"]) else 0.0,
             "num_valuation_points": int(r["num_valuation_points"]) if pd.notna(r["num_valuation_points"]) else 0,
             "trajectory": str(r["trajectory"]),
+            "position": str(r["position"]) if pd.notna(r["position"]) else "Unknown",
+            "position_group": str(r["position_group"]) if pd.notna(r["position_group"]) else "Unknown",
+            "age_at_peak": float(r["age_at_peak"]),
+            "years_to_peak": float(r["years_to_peak"]),
+            "value_volatility": float(r["value_volatility"]),
         }
         for _, r in df.iterrows()
     ]
@@ -326,7 +404,7 @@ def list_datasets() -> dict[str, Any]:
 def download_dataset(filename: str) -> FileResponse:
     if filename not in DATASET_CATALOG:
         raise HTTPException(status_code=404, detail="Dataset file not found")
-    fpath = _resolve_data_dir() / filename
+    fpath = resolve_data_dir() / filename
     if not fpath.exists():
         raise HTTPException(status_code=404, detail="Dataset file missing on disk")
     return FileResponse(

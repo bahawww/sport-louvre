@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ml_pipeline.py main.py ./
+COPY features.py ml_pipeline.py main.py ./
 
 EXPOSE 8000
 
