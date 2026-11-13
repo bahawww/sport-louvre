@@ -1,27 +1,21 @@
 import type { TrajectoryClass } from "@/lib/api";
-import { TRAJECTORY_META } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { trajectoryLabel } from "@/lib/format";
 
-const TONE_CLASS: Record<string, string> = {
-  baik: "bg-[var(--ispu-baik-bg)] text-[var(--ispu-baik-fg)]",
-  sedang: "bg-[var(--ispu-sedang-bg)] text-[var(--ispu-sedang-fg)]",
-  "tidak-sehat": "bg-[var(--ispu-tidak-sehat-bg)] text-[var(--ispu-tidak-sehat-fg)]",
-  "sangat-tidak-sehat": "bg-[var(--ispu-sangat-tidak-sehat-bg)] text-[var(--ispu-sangat-tidak-sehat-fg)]",
-  berbahaya: "bg-[var(--ispu-berbahaya-bg)] text-[var(--ispu-berbahaya-fg)]",
+const STYLES: Record<TrajectoryClass, string> = {
+  rising_star: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  growing: "bg-sky-500/15 text-sky-400 border-sky-500/30",
+  stable: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+  declining: "bg-orange-500/15 text-orange-400 border-orange-500/30",
+  falling_sharply: "bg-rose-500/15 text-rose-400 border-rose-500/30",
 };
 
-export function TrajectoryBadge({ value, className }: { value: string; className?: string }) {
-  const meta = TRAJECTORY_META[value as TrajectoryClass];
-  const toneClass = meta ? TONE_CLASS[meta.tone] : "bg-[var(--chip)] text-[var(--text-secondary)]";
+export function TrajectoryBadge({ value, className = "" }: { value: string; className?: string }) {
+  const cls = STYLES[value as TrajectoryClass] ?? "bg-slate-700/40 text-slate-300 border-slate-600";
   return (
     <span
-      className={cn(
-        "inline-flex items-center rounded-[var(--radius-sm)] px-2.5 py-0.5 text-[12px] font-bold tracking-[0.01em]",
-        toneClass,
-        className,
-      )}
+      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${cls} ${className}`}
     >
-      {meta?.label ?? value.replace(/_/g, " ")}
+      {trajectoryLabel(value)}
     </span>
   );
 }

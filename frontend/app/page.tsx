@@ -1,280 +1,90 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo } from "react";
+import { useState } from "react";
 
-import { ChartLegend, EChart, useChartColors } from "@/components/chart";
-import { CompareCard, MetricCard, MetricGrid } from "@/components/stat-card";
-import { ChartSkeleton, ErrorState } from "@/components/states";
-import { Callout } from "@/components/ui/callout";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { LogoMark } from "@/components/logo-mark";
+import { ArenaPanel } from "@/components/panels/ArenaPanel";
+import { DiagnosticsPanel } from "@/components/panels/DiagnosticsPanel";
+import { ErrorAnalysisPanel } from "@/components/panels/ErrorAnalysisPanel";
+import { RecommendationsPanel } from "@/components/panels/RecommendationsPanel";
+import { ScoutingSimulatorPanel } from "@/components/panels/ScoutingSimulatorPanel";
+import { TrajectoryExplorerPanel } from "@/components/panels/TrajectoryExplorerPanel";
 import { useApi, type OverviewResponse, type TestPredictionsResponse } from "@/lib/api";
-import { fmt, trajectoryLabel } from "@/lib/format";
 
-export default function OverviewPage() {
+const TABS = [
+  { id: "arena", label: "KPI & Model Arena" },
+  { id: "diagnostics", label: "Confusion & Scatter" },
+  { id: "errors", label: "Analisis Kesalahan" },
+  { id: "history", label: "Tren Karir" },
+  { id: "simulator", label: "Scouting Simulator" },
+  { id: "recommendations", label: "Rekomendasi Klub" },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
+
+export default function DashboardPage() {
+  const [tab, setTab] = useState<TabId>("arena");
   const overview = useApi<OverviewResponse>("/overview");
   const preds = useApi<TestPredictionsResponse>("/test-predictions");
-  const c = useChartColors();
-
-  const cleanBest = useMemo(() => {
-    if (!overview.data) return null;
-    const ms = overview.data.classification.clean_mode.models;
-    return ms.find((m) => m.name === overview.data!.classification.clean_mode.best_model) ?? ms[0];
-  }, [overview.data]);
-
-  const leakBest = useMemo(() => {
-    if (!overview.data) return null;
-    const ms = overview.data.classification.leakage_mode.models;
-    return ms.find((m) => m.name === overview.data!.classification.leakage_mode.best_model) ?? ms[0];
-  }, [overview.data]);
-
-  const regBest = useMemo(() => {
-    if (!overview.data) return null;
-    const ms = overview.data.regression.models;
-    return ms.find((m) => m.name === overview.data!.regression.best_model) ?? ms[0];
-  }, [overview.data]);
-
-  const regRunner = useMemo(() => {
-    if (!overview.data || !regBest) return null;
-    return (
-      overview.data.regression.models.find((m) => m.name !== regBest.name) ??
-      overview.data.regression.models[0]
-    );
-  }, [overview.data, regBest]);
-
-  const clsCompareOption = useMemo(() => {
-    if (!overview.data) return null;
-    const cleanModels = overview.data.classification.clean_mode.models;
-    const leakModels = overview.data.classification.leakage_mode.models;
-    const names = cleanModels.map((m) => m.name);
-    return {
-      grid: { left: 48, right: 16, top: 20, bottom: 44 },
-      tooltip: {
-        trigger: "axis",
-        axisPointer: { type: "shadow" },
-        valueFormatter: (v: number) => `${(v * 100).toFixed(1)}%`,
-      },
-      xAxis: {
-        type: "category",
-        data: names,
-        axisLabel: { color: c.muted, fontSize: 12 },
-        axisLine: { lineStyle: { color: c.axis } },
-      },
-      yAxis: {
-        type: "value",
-        min: 0,
-        max: 1,
-        axisLabel: { color: c.muted, fontSize: 11, formatter: (v: number) => `${Math.round(v * 100)}%` },
-        splitLine: { lineStyle: { color: c.grid } },
-      },
-      series: [
-        {
-          name: "Mode Clean (tanpa bocoran)",
-          type: "bar",
-          barMaxWidth: 32,
-          itemStyle: { color: c.accent, borderRadius: [4, 4, 0, 0] },
-          data: names.map((n) => cleanModels.find((m) => m.name === n)?.accuracy ?? 0),
-        },
-        {
-          name: "Mode Full Features (Leakage)",
-          type: "bar",
-          barMaxWidth: 32,
-          itemStyle: { color: c.series2, borderRadius: [4, 4, 0, 0] },
-          data: names.map((n) => leakModels.find((m) => m.name === n)?.accuracy ?? 0),
-        },
-      ],
-    };
-  }, [overview.data, c]);
-
-  const trajDistOption = useMemo(() => {
-    if (!overview.data) return null;
-    const entries = Object.entries(overview.data.dataset.trajectories);
-    return {
-      grid: { left: 120, right: 28, top: 12, bottom: 28 },
-      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-      xAxis: {
-        type: "value",
-        axisLabel: { color: c.muted, fontSize: 11 },
-        splitLine: { lineStyle: { color: c.grid } },
-      },
-      yAxis: {
-        type: "category",
-        inverse: true,
-        data: entries.map(([k]) => trajectoryLabel(k)),
-        axisLabel: { color: c.text, fontSize: 12, fontWeight: 600 },
-        axisLine: { lineStyle: { color: c.axis } },
-      },
-      series: [
-        {
-          name: "Jumlah pemain",
-          type: "bar",
-          barMaxWidth: 22,
-          itemStyle: { color: c.accent, borderRadius: [0, 4, 4, 0] },
-          label: { show: true, position: "right", color: c.secondary, fontSize: 12, fontWeight: 700 },
-          data: entries.map(([, v]) => v),
-        },
-      ],
-    };
-  }, [overview.data, c]);
-
-  if (overview.isError) {
-    return <ErrorState message={(overview.error as Error)?.message} onRetry={() => overview.refetch()} />;
-  }
 
   return (
-    <>
-      <section className="ua-enter flex flex-col gap-6 pt-6">
-        <h1 className="ua-display text-balance">
-          Membaca nilai pasar pemain tanpa ilusi data leakage.
-        </h1>
-        <p className="ua-lead">
-          Evaluasi <strong>508 pemain</strong> dari 5 liga top Eropa (Transfermarkt 2025/2026) pada
-          split <strong>80:20</strong>. Membandingkan klasifikasi{" "}
-          <span className="ua-mark-1">Mode Clean</span> dengan{" "}
-          <span className="ua-mark-2">Mode Full Features</span> serta regresi estimasi{" "}
-          <strong>current_value_eur</strong>.
-        </p>
-        <div className="flex flex-wrap gap-3 pt-1">
-          <Link href="/evaluasi" className="ua-btn ua-btn--primary">
-            Buka Evaluasi & Matriks
-          </Link>
-          <Link href="/simulator" className="ua-btn ua-btn--secondary">
-            Coba Simulator Scouting
-          </Link>
-        </div>
-      </section>
-
-      <MetricGrid aria-label="Ringkasan performa utama">
-        <MetricCard
-          label="Akurasi Clean Terbaik"
-          help="Klasifikasi trajectory tanpa fitur turunan target (cagr, decline_pct, multiplier)."
-          value={cleanBest ? fmt.pct(cleanBest.accuracy) : "—"}
-          note={cleanBest ? `${cleanBest.name} · F1 ${fmt.pct(cleanBest.f1_weighted)}` : undefined}
-          loading={overview.isLoading}
-        />
-        <MetricCard
-          label="Inflasi Data Leakage"
-          help="Lonjakan akurasi semu saat fitur pasca-valuasi ikut dilatih ke dalam model."
-          value={
-            preds.data ? `+${(preds.data.error_analysis.leakage_delta_acc * 100).toFixed(1)} pp` : "—"
-          }
-          note={leakBest ? `${leakBest.name} mencapai ${fmt.pct(leakBest.accuracy)}` : undefined}
-          loading={preds.isLoading}
-        />
-        <MetricCard
-          label="Regresi Valuasi (R²)"
-          help="Seberapa besar variasi current_value_eur dijelaskan oleh profil karier bersih."
-          value={regBest ? regBest.r2.toFixed(3) : "—"}
-          note={regBest ? `${regBest.name} · MAE ${fmt.eur(regBest.mae)}` : undefined}
-          loading={overview.isLoading}
-        />
-        <MetricCard
-          label="Sampel & Riwayat"
-          help="Total pemain unik dan titik historis valuasi dari Transfermarkt."
-          value={overview.data ? fmt.int(overview.data.dataset.total_players) : "—"}
-          note={
-            overview.data
-              ? `${fmt.int(overview.data.dataset.history_rows)} titik historis · 102 data uji`
-              : undefined
-          }
-          loading={overview.isLoading}
-        />
-      </MetricGrid>
-
-      <Card>
-        <CardHeader
-          title="Clean Mode vs Full Features (Leakage)"
-          description="Menghapus fitur bocoran (value_cagr, post_peak_decline_pct, value_multiplier_x) menurunkan akurasi dari 100% menjadi 66,7% — angka jujur yang benar-benar bisa dipakai untuk scouting."
-          action={
-            <Link href="/kesalahan" className="ua-btn ua-btn--secondary ua-btn--sm">
-              Bedah pola error
-            </Link>
-          }
-        />
-        <CardBody>
-          {cleanBest && leakBest && regBest && regRunner ? (
-            <div className="grid gap-8 md:grid-cols-2">
-              <CompareCard
-                label="Klasifikasi Trajectory (Akurasi Uji)"
-                help="Perbandingan model Clean terbaik vs Full Features dengan fitur bocoran."
-                badge={{
-                  text: "Audit Leakage",
-                  title: "Selisih akurasi akibat data leakage",
-                  tone: "warning",
-                }}
-                main={{
-                  who: `${cleanBest.name} (Clean)`,
-                  value: fmt.pct(cleanBest.accuracy),
-                  pct: cleanBest.accuracy * 100,
-                }}
-                other={{
-                  who: `${leakBest.name} (Leakage)`,
-                  value: fmt.pct(leakBest.accuracy),
-                  pct: leakBest.accuracy * 100,
-                }}
-              />
-              <CompareCard
-                label="Regresi current_value_eur (R²)"
-                help="Gradient Boosting Regressor dibandingkan dengan model pembanding tanpa last_value_eur."
-                badge={{
-                  text: "Layak Screening",
-                  title: "R² > 0.90 pada data uji bersih",
-                  tone: "success",
-                }}
-                main={{
-                  who: regBest.name,
-                  value: regBest.r2.toFixed(3),
-                  pct: regBest.r2 * 100,
-                }}
-                other={{
-                  who: regRunner.name,
-                  value: regRunner.r2.toFixed(3),
-                  pct: regRunner.r2 * 100,
-                }}
-              />
+    <div className="min-h-dvh bg-[#0B1117] text-[#F1F5F9]">
+      <header className="sticky top-0 z-20 border-b border-[#243244] bg-[#0B1117]/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-3">
+            <LogoMark size={28} />
+            <div>
+              <h1 className="text-base font-extrabold tracking-tight text-[#F1F5F9]">
+                Sport Louvre
+              </h1>
+              <p className="text-[11px] text-[#94A3B8]">
+                Transfermarkt 2025/2026 · Football Transfer Value Intelligence
+              </p>
             </div>
-          ) : null}
+          </div>
 
-          <ChartLegend
-            items={[
-              { label: "Mode Clean (tanpa bocoran)", color: c.accent },
-              { label: "Mode Full Features (Leakage)", color: c.series2 },
-            ]}
-          />
-          {clsCompareOption ? (
-            <EChart
-              option={clsCompareOption}
-              height={300}
-              label="Grafik batang perbandingan akurasi Mode Clean dan Mode Leakage pada 3 model klasifikasi"
-            />
-          ) : (
-            <ChartSkeleton height={300} />
-          )}
-          <Callout>
-            Model dengan fitur bocoran terlihat sempurna (100% pada Gradient Boosting), tetapi tidak
-            berguna di dunia nyata karena fitur seperti <code>post_peak_decline_pct</code> dan{" "}
-            <code>value_cagr</code> baru diketahui setelah valuasi akhir terjadi.
-          </Callout>
-        </CardBody>
-      </Card>
+          <nav className="flex flex-wrap gap-1.5" aria-label="Dashboard tabs">
+            {TABS.map((t) => {
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    active
+                      ? "bg-[#10B981] text-[#0B1117]"
+                      : "bg-[#121A24] text-[#94A3B8] hover:bg-[#182230] hover:text-[#F1F5F9]"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </header>
 
-      <Card>
-        <CardHeader
-          title="Distribusi Kelas Trajectory (508 Pemain)"
-          description="Sebagian besar pemain berada pada fase growing (228) dan rising_star (117), sementara kelas falling_sharply hanya 26 pemain."
-        />
-        <CardBody>
-          {trajDistOption ? (
-            <EChart
-              option={trajDistOption}
-              height={240}
-              label="Distribusi jumlah pemain per kelas trajectory"
-            />
-          ) : (
-            <ChartSkeleton height={240} />
-          )}
-        </CardBody>
-      </Card>
-    </>
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+        {overview.isLoading || preds.isLoading ? (
+          <div className="rounded-xl border border-[#243244] bg-[#121A24] p-8 text-center text-sm text-[#94A3B8]">
+            Memuat model ML dan data evaluasi Transfermarkt...
+          </div>
+        ) : overview.isError || preds.isError || !overview.data || !preds.data ? (
+          <div className="rounded-xl border border-rose-500/30 bg-[#121A24] p-6 text-sm text-rose-400">
+            Gagal memuat data API. Pastikan service backend sehat.
+          </div>
+        ) : (
+          <>
+            {tab === "arena" && <ArenaPanel overview={overview.data} preds={preds.data} />}
+            {tab === "diagnostics" && <DiagnosticsPanel overview={overview.data} preds={preds.data} />}
+            {tab === "errors" && <ErrorAnalysisPanel preds={preds.data} />}
+            {tab === "history" && <TrajectoryExplorerPanel />}
+            {tab === "simulator" && <ScoutingSimulatorPanel />}
+            {tab === "recommendations" && <RecommendationsPanel preds={preds.data} />}
+          </>
+        )}
+      </main>
+    </div>
   );
 }

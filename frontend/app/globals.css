@@ -1,92 +1,23 @@
 @import "tailwindcss";
-@import "./tokens.css";
-@import "./ua.css";
-@import "./ua-extras.css";
 
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
-
-/* Utilitas Tailwind memakai token design system Udara Jakarta. Nama lama (surface, line, ink, accent,
-   card, muted, ...) dipertahankan sebagai alias supaya komponen tidak perlu ditulis ulang satu per satu. */
-@theme inline {
-  --color-bg: var(--bg);
-  --color-surface: var(--panel);
-  --color-sunken: var(--chip);
-  --color-line: var(--rule);
-  --color-line-soft: var(--rule-soft);
-  --color-ink: var(--text);
-  --color-ink-2: var(--text-secondary);
-  --color-ink-3: var(--text-muted);
-  --color-brand: var(--text);
-  --color-on-brand: var(--bg);
-  --color-accent: var(--series-1);
-  --color-series-1: var(--series-1);
-  --color-series-2: var(--series-2);
-  --color-track: var(--track);
-  --color-ok-bg: var(--ispu-baik-bg);
-  --color-ok-fg: var(--ispu-baik-fg);
-  --color-warn: var(--warning);
-  --color-danger: var(--danger);
-
-  --color-background: var(--bg);
-  --color-foreground: var(--text);
-  --color-card: var(--panel);
-  --color-card-foreground: var(--text);
-  --color-muted: var(--chip);
-  --color-muted-foreground: var(--text-muted);
-  --color-border: var(--rule);
-  --color-primary: var(--text);
-  --color-primary-foreground: var(--bg);
-  --color-ring: var(--series-1);
-  --color-destructive: var(--danger);
-}
-
-/* Font dari next/font; tokens.css hanya tahu namanya. */
 :root {
+  color-scheme: dark;
+  --pitch-bg: #0b1117;
+  --pitch-surface: #121a24;
+  --pitch-elevated: #182230;
+  --pitch-border: #243244;
+  --pitch-mint: #10b981;
+  --pitch-gold: #f59e0b;
+  --pitch-crimson: #ef4444;
+  --pitch-chalk: #f1f5f9;
+  --pitch-steel: #94a3b8;
   --font-sans: var(--font-jakarta), system-ui, sans-serif;
 }
 
-html {
-  scroll-padding-top: 88px;
-}
-
 body {
-  background: var(--bg);
-  color: var(--text);
+  background: var(--pitch-bg);
+  color: var(--pitch-chalk);
   font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 24px;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
-}
-
-:focus-visible {
-  outline: 2px solid var(--series-1);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-  }
-}
-
-/* Kalender (react-day-picker): warna mengikuti token tema; tombol navigasi 44px untuk target sentuh.
-   Selector `dialog .rdp-root` agar menang atas style.css library yang dimuat belakangan. */
-dialog .rdp-root {
-  --rdp-accent-color: var(--series-1);
-  --rdp-accent-background-color: var(--chip);
-  --rdp-range_start-color: var(--on-accent);
-  --rdp-range_start-background: var(--series-1);
-  --rdp-range_end-color: var(--on-accent);
-  --rdp-range_end-background: var(--series-1);
-  --rdp-range_middle-color: var(--text);
-  --rdp-range_middle-background-color: var(--chip);
-  --rdp-today-color: var(--series-1);
-  --rdp-nav-height: 2.75rem;
-  --rdp-nav_button-height: 2.75rem;
-  --rdp-nav_button-width: 2.75rem;
 }
