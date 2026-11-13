@@ -3,6 +3,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { LeagueBadge } from "@/components/entity-media";
 import { TrajectoryBadge } from "@/components/trajectory-badge";
 import { fetchApi, type SimulateRequest, type SimulateResponse } from "@/lib/api";
 import { fmt, trajectoryLabel } from "@/lib/format";
@@ -126,7 +127,9 @@ export function ScoutingSimulatorPanel() {
             {numField("Jumlah Klub", "num_clubs_career", 1)}
 
             <label className="block text-xs">
-              <span className="font-semibold text-[#94A3B8]">Liga</span>
+              <span className="flex items-center gap-2 font-semibold text-[#94A3B8]">
+                Liga <LeagueBadge league={form.league_name} size={14} showName={false} />
+              </span>
               <select
                 value={form.league_name}
                 onChange={(e) => setForm((p) => ({ ...p, league_name: e.target.value }))}

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { EChart } from "@/components/chart";
+import { ClubBadge, LeagueBadge, PlayerAvatar } from "@/components/entity-media";
 import { TrajectoryBadge } from "@/components/trajectory-badge";
 import { useApi, type HistoryResponse, type PlayerHistoryItem } from "@/lib/api";
 import { fmt } from "@/lib/format";
@@ -121,13 +122,18 @@ export function TrajectoryExplorerPanel() {
                     active ? "bg-[#182230]" : "hover:bg-[#182230]/50"
                   }`}
                 >
-                  <div className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-[#F1F5F9]">
-                      {p.name}
-                    </span>
-                    <span className="block truncate text-xs text-[#94A3B8]">
-                      {p.peak_club} · {p.league_name}
-                    </span>
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <PlayerAvatar playerId={p.player_id} name={p.name} size={34} />
+                    <div className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-[#F1F5F9]">
+                        {p.name}
+                      </span>
+                      <span className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-[#94A3B8]">
+                        <ClubBadge playerId={p.player_id} club={p.peak_club} size={13} />
+                        <span>·</span>
+                        <LeagueBadge league={p.league_name} size={13} showName={false} />
+                      </span>
+                    </div>
                   </div>
                   <span className="shrink-0 text-xs font-bold text-[#10B981]">
                     {fmt.eurShort(p.current_value_eur)}
@@ -142,12 +148,17 @@ export function TrajectoryExplorerPanel() {
           {activePlayer ? (
             <>
               <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#1E293B] pb-4">
-                <div>
-                  <h3 className="text-xl font-extrabold text-[#F1F5F9]">{activePlayer.name}</h3>
-                  <p className="mt-0.5 text-xs text-[#94A3B8]">
-                    {activePlayer.peak_club} · {activePlayer.league_name} · {activePlayer.nationality} ·
-                    Usia {activePlayer.age} thn
-                  </p>
+                <div className="flex items-center gap-3.5">
+                  <PlayerAvatar playerId={activePlayer.player_id} name={activePlayer.name} size={56} />
+                  <div>
+                    <h3 className="text-xl font-extrabold text-[#F1F5F9]">{activePlayer.name}</h3>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#94A3B8]">
+                      <ClubBadge playerId={activePlayer.player_id} club={activePlayer.peak_club} size={16} />
+                      <span>·</span>
+                      <LeagueBadge league={activePlayer.league_name} size={16} />
+                      <span>· {activePlayer.nationality} · Usia {activePlayer.age} thn</span>
+                    </div>
+                  </div>
                 </div>
                 <TrajectoryBadge value={activePlayer.trajectory} />
               </div>

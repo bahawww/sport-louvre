@@ -3,6 +3,7 @@
 import { Download } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { ClubBadge, LeagueBadge, PlayerAvatar } from "@/components/entity-media";
 import { TrajectoryBadge } from "@/components/trajectory-badge";
 import { useApi, type DatasetsResponse } from "@/lib/api";
 import { fmt } from "@/lib/format";
@@ -132,12 +133,20 @@ export function DatasetPanel() {
                 <tr key={p.player_id} className="hover:bg-[#182230]/60">
                   <td className="py-2 pr-3 text-[#64748B]">{idx + 1}</td>
                   <td className="py-2 pr-3">
-                    <span className="font-semibold text-[#F1F5F9]">{p.name}</span>
-                    <span className="block text-[11px] text-[#94A3B8]">
-                      {p.peak_club} · {p.nationality}
-                    </span>
+                    <div className="flex items-center gap-2.5">
+                      <PlayerAvatar playerId={p.player_id} name={p.name} size={30} />
+                      <div className="min-w-0">
+                        <span className="block truncate font-semibold text-[#F1F5F9]">{p.name}</span>
+                        <span className="mt-0.5 flex items-center gap-1 text-[11px] text-[#94A3B8]">
+                          <ClubBadge playerId={p.player_id} club={p.peak_club} size={12} />
+                          <span>· {p.nationality}</span>
+                        </span>
+                      </div>
+                    </div>
                   </td>
-                  <td className="py-2 px-3 text-[#94A3B8]">{p.league_name}</td>
+                  <td className="py-2 px-3 text-[#94A3B8]">
+                    <LeagueBadge league={p.league_name} size={14} />
+                  </td>
                   <td className="py-2 px-3">
                     <TrajectoryBadge value={p.trajectory} />
                   </td>

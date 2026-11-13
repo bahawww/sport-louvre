@@ -1,5 +1,6 @@
 "use client";
 
+import { ClubBadge, LeagueBadge, PlayerAvatar } from "@/components/entity-media";
 import { TrajectoryBadge } from "@/components/trajectory-badge";
 import type { TestPredictionsResponse } from "@/lib/api";
 import { fmt } from "@/lib/format";
@@ -41,8 +42,17 @@ export function RecommendationsPanel({ preds }: { preds: TestPredictionsResponse
                 {preds.undervalued.slice(0, 10).map((r) => (
                   <tr key={r.player_id}>
                     <td className="py-2 pr-2">
-                      <span className="font-semibold text-[#F1F5F9]">{r.name}</span>
-                      <span className="block text-[11px] text-[#94A3B8]">{r.peak_club}</span>
+                      <div className="flex items-center gap-2.5">
+                        <PlayerAvatar playerId={r.player_id} name={r.name} size={30} />
+                        <div className="min-w-0">
+                          <span className="block truncate font-semibold text-[#F1F5F9]">{r.name}</span>
+                          <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#94A3B8]">
+                            <ClubBadge playerId={r.player_id} club={r.peak_club} size={12} />
+                            <span>·</span>
+                            <LeagueBadge league={r.league_name} size={12} showName={false} />
+                          </span>
+                        </div>
+                      </div>
                     </td>
                     <td className="py-2 px-2">
                       <TrajectoryBadge value={r.actual_trajectory} />
@@ -85,8 +95,17 @@ export function RecommendationsPanel({ preds }: { preds: TestPredictionsResponse
                 {preds.overvalued.slice(0, 10).map((r) => (
                   <tr key={r.player_id}>
                     <td className="py-2 pr-2">
-                      <span className="font-semibold text-[#F1F5F9]">{r.name}</span>
-                      <span className="block text-[11px] text-[#94A3B8]">{r.peak_club}</span>
+                      <div className="flex items-center gap-2.5">
+                        <PlayerAvatar playerId={r.player_id} name={r.name} size={30} />
+                        <div className="min-w-0">
+                          <span className="block truncate font-semibold text-[#F1F5F9]">{r.name}</span>
+                          <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#94A3B8]">
+                            <ClubBadge playerId={r.player_id} club={r.peak_club} size={12} />
+                            <span>·</span>
+                            <LeagueBadge league={r.league_name} size={12} showName={false} />
+                          </span>
+                        </div>
+                      </div>
                     </td>
                     <td className="py-2 px-2">
                       <TrajectoryBadge value={r.actual_trajectory} />

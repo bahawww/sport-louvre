@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { EChart } from "@/components/chart";
+import { ClubBadge, LeagueBadge, PlayerAvatar } from "@/components/entity-media";
 import { TrajectoryBadge } from "@/components/trajectory-badge";
 import type { OverviewResponse, TestPredictionsResponse } from "@/lib/api";
 import { fmt, trajectoryLabel } from "@/lib/format";
@@ -239,12 +240,20 @@ export function DiagnosticsPanel({
               {filtered.map((r) => (
                 <tr key={r.player_id} className="hover:bg-[#182230]/60">
                   <td className="py-2 pr-3">
-                    <span className="font-semibold text-[#F1F5F9]">{r.name}</span>
-                    <span className="block text-[11px] text-[#94A3B8]">
-                      {r.peak_club} · {r.age} thn
-                    </span>
+                    <div className="flex items-center gap-2.5">
+                      <PlayerAvatar playerId={r.player_id} name={r.name} size={30} />
+                      <div className="min-w-0">
+                        <span className="block truncate font-semibold text-[#F1F5F9]">{r.name}</span>
+                        <span className="mt-0.5 flex items-center gap-1 text-[11px] text-[#94A3B8]">
+                          <ClubBadge playerId={r.player_id} club={r.peak_club} size={12} />
+                          <span>· {r.age} thn</span>
+                        </span>
+                      </div>
+                    </div>
                   </td>
-                  <td className="py-2 px-3 text-[#94A3B8]">{r.league_name}</td>
+                  <td className="py-2 px-3 text-[#94A3B8]">
+                    <LeagueBadge league={r.league_name} size={14} />
+                  </td>
                   <td className="py-2 px-3">
                     <TrajectoryBadge value={r.actual_trajectory} />
                   </td>
