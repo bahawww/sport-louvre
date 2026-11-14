@@ -57,7 +57,7 @@ export function PlayerAvatar({
   return (
     <span
       style={{ width: size, height: size }}
-      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-b from-[#233044] to-[#131C29] text-[10px] font-bold text-[#94A3B8] ring-1 ring-white/15 shadow-sm ${className}`}
+      className={`relative inline-flex shrink-0 items-end justify-center overflow-hidden rounded-full bg-gradient-to-b from-[#233044] to-[#131C29] text-[10px] font-bold text-[#94A3B8] ring-1 ring-white/15 shadow-sm ${className}`}
     >
       {src && !failed ? (
         <img
@@ -65,10 +65,10 @@ export function PlayerAvatar({
           alt={name}
           loading="lazy"
           onError={() => setFailed(true)}
-          className="h-full w-full object-cover object-top drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]"
+          className="h-full w-full object-contain object-bottom px-[2px] pt-[3px] drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]"
         />
       ) : (
-        <span>{getInitials(name)}</span>
+        <span className="self-center">{getInitials(name)}</span>
       )}
     </span>
   );
