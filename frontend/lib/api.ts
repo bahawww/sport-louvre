@@ -129,6 +129,40 @@ export interface OverviewResponse {
     interval_level: number;
     limits: string[];
   };
+  outlook?: {
+    threshold: number;
+    train_rows: number;
+    validation: OutlookResponse["validation"] & {
+      feature_importance?: FeatureImportanceItem[];
+    };
+  };
+  leak_audit?: {
+    rule_accuracy: number;
+    share_players_target_exposed: number;
+    contamination_test: {
+      columns_added: string[];
+      without_csv_columns: Record<string, number>;
+      with_csv_columns: Record<string, number>;
+      accuracy_inflation_pp: number;
+    };
+    previous_pipeline: {
+      reported_clean_classifier: Record<string, number>;
+      simulate_endpoint_classifier: Record<string, number>;
+    } | null;
+  };
+  data_card?: {
+    players: number;
+    valuation_points: number;
+    first_valuation: string;
+    data_as_of: string;
+    repairs: Record<string, unknown>;
+  };
+  model_card?: {
+    version: string;
+    trained_at: string;
+    scikit_learn: string;
+    training_seconds: number;
+  };
   out_of_time?: {
     cutoff: string;
     train_rows: number;
