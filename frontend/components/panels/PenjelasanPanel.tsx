@@ -11,6 +11,8 @@ import {
 } from "@/lib/api";
 import { fmt, TREND_META } from "@/lib/format";
 
+import { WorkflowRoadmap } from "./WorkflowRoadmap";
+
 /** The player whose real price history explains the four models. */
 const EXAMPLE_PLAYER_ID = "148455"; // Mohamed Salah: a full career arc, 41 valuations
 
@@ -612,28 +614,10 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
         <div className="px-5 pt-4">
           <h3 className="text-base font-semibold text-[#F1F5F9]">Alur kerja dari CSV sampai model</h3>
           <p className="mt-1 text-[13px] text-[#94A3B8]">
-            Urutan yang dijalankan tiap kali model dilatih. Angka di kanan adalah hasil tahap itu pada data sekarang.
+            Sepuluh tahap yang dijalankan tiap kali model dilatih. Pilih satu tahap untuk melihat apa yang terjadi pada data.
           </p>
         </div>
-        <ol className="mt-3">
-          {workflow.map((w, i) => (
-            <li
-              key={w.stage}
-              className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-3 gap-y-1 border-t border-[#1B2634] px-5 py-3 sm:grid-cols-[1.5rem_13rem_minmax(0,1fr)_11rem] sm:gap-x-5"
-            >
-              <span className="pt-px text-[13px] tabular-nums text-[#7C8BA1]">{i + 1}</span>
-              <div>
-                <p className="text-sm font-semibold text-[#F1F5F9]">{w.stage}</p>
-                <code className="text-xs text-[#7C8BA1]">{w.code}</code>
-              </div>
-              <p className="col-start-2 text-[13px] leading-relaxed text-[#CBD5E1] sm:col-start-3">{w.does}</p>
-              <p className="col-start-2 text-[13px] text-[#94A3B8] sm:col-start-4 sm:text-right">
-                <span className="text-lg font-semibold tabular-nums text-[#F1F5F9]">{w.figure}</span>
-                <span className="block text-xs">{w.unit}</span>
-              </p>
-            </li>
-          ))}
-        </ol>
+        <WorkflowRoadmap steps={workflow} overview={overview} sim={sim} />
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
