@@ -97,7 +97,7 @@ export function DatasetPanel() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Cari nama, klub, atau negara..."
-              className="rounded-lg border border-[#243244] bg-[#0B1117] px-3 py-1.5 text-xs text-[#F1F5F9] placeholder-[#64748B]"
+              className="w-56 rounded-lg border border-[#243244] bg-[#0B1117] px-3 py-1.5 text-xs text-[#F1F5F9] placeholder-[#64748B]"
             />
             <select
               value={league}
@@ -116,7 +116,7 @@ export function DatasetPanel() {
 
         <div className="mt-4 max-h-[460px] overflow-auto">
           <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 border-b border-[#243244] bg-[#121A24] text-[#94A3B8]">
+            <thead className="sticky top-0 z-20 border-b border-[#243244] bg-[#121A24] text-[#94A3B8]">
               <tr>
                 <th className="py-2 pr-3">#</th>
                 <th className="py-2 pr-3">Pemain</th>

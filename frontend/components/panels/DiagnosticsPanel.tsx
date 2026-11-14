@@ -441,7 +441,7 @@ export function DiagnosticsPanel({
 
         <div className="mt-4 max-h-[420px] overflow-auto">
           <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 border-b border-[#243244] bg-[#121A24] text-[#94A3B8]">
+            <thead className="sticky top-0 z-20 border-b border-[#243244] bg-[#121A24] text-[#94A3B8]">
               <tr>
                 <th className="py-2 pr-3">Pemain</th>
                 <th className="py-2 px-3">Liga</th>

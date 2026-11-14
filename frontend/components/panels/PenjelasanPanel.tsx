@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { PlayerAvatar } from "@/components/entity-media";
 import {
   fetchApi,
   type FeatureImportanceItem,
@@ -569,11 +570,15 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
         <div className="grid lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
           <div className="min-w-0 p-5">
             {p ? (
-              <p className="mb-3 text-[13px] text-[#94A3B8]">
-                <span className="font-semibold text-[#F1F5F9]">{p.name}</span>, {p.position}, {p.age} tahun. Nilai sekarang{" "}
-                <span className="font-semibold text-[#F1F5F9]">{fmt.eur(p.last_value_eur)}</span>, puncak{" "}
-                {fmt.eur(p.peak_value_eur)}. {p.history.length} valuasi sejak {p.history[0].date.slice(0, 4)}.
-              </p>
+              <div className="mb-3 flex items-center gap-3">
+                <PlayerAvatar playerId={p.player_id} name={p.name} size={48} />
+                <p className="text-[13px] leading-relaxed text-[#94A3B8]">
+                  <span className="block text-base font-semibold text-[#F1F5F9]">{p.name}</span>
+                  {p.position}, {p.age} tahun. Nilai sekarang{" "}
+                  <span className="font-semibold text-[#F1F5F9]">{fmt.eur(p.last_value_eur)}</span>, puncak{" "}
+                  {fmt.eur(p.peak_value_eur)}. {p.history.length} valuasi sejak {p.history[0].date.slice(0, 4)}.
+                </p>
+              </div>
             ) : null}
             {sim?.player ? (
               <HistoryChart sim={sim} model={model} />

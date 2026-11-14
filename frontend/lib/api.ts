@@ -231,6 +231,7 @@ export interface OutlookRow {
   p_up: number;
   p_down: number;
   signal: "Buy" | "Neutral" | "DepreciationRisk";
+  reasons?: { group: string; contribution: number; key_feature: string; key_value: number | string | null }[];
 }
 
 export interface OutlookGroupCheck {
