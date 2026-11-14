@@ -12,7 +12,7 @@ import {
 import { fmt, TREND_META } from "@/lib/format";
 
 /** The player whose real price history explains the four models. */
-const EXAMPLE_PLAYER_ID = "433177";
+const EXAMPLE_PLAYER_ID = "148455"; // Mohamed Salah: a full career arc, 41 valuations
 
 type ModelId = "forecast" | "trend" | "outlook" | "fundamental";
 
@@ -123,7 +123,6 @@ function HistoryChart({ sim, model }: { sim: SimulateResponse; model: ModelId })
           { id: "falling_sharply", lo: 0, hi: 0.4 },
         ]
       : [];
-  const xFuture = x(last.t);
   const labelLeft = x(target.t) > width - 130;
 
   return (
@@ -156,14 +155,14 @@ function HistoryChart({ sim, model }: { sim: SimulateResponse; model: ModelId })
           return (
             <g key={b.id}>
               <rect
-                x={xFuture}
+                x={pad.l}
                 y={top}
-                width={width - pad.r - xFuture}
+                width={width - pad.r - pad.l}
                 height={bottom - top}
-                fill={i % 2 === 0 ? "#162130" : "#111923"}
+                fill={i % 2 === 0 ? "#162130" : "#0F1721"}
               />
               {bottom - top >= 13 ? (
-                <text x={width - pad.r - 6} y={(top + bottom) / 2 + 4} textAnchor="end" fontSize="11" fill="#CBD5E1">
+                <text x={pad.l + 8} y={Math.min(bottom - 5, top + 15)} fontSize="11" fill="#CBD5E1">
                   {width < 520 ? TREND_META[b.id].label.split(" / ")[0] : TREND_META[b.id].label} {pct0(prob)}
                 </text>
               ) : null}
@@ -181,7 +180,7 @@ function HistoryChart({ sim, model }: { sim: SimulateResponse; model: ModelId })
               fill="#111923"
             />
             <path d={path(hidden)} fill="none" stroke="#56657A" strokeWidth="1.5" strokeDasharray="3 4" />
-            <text x={x(anchorCut) + 6} y={pad.t + 14} fontSize="11" fill="#7C8BA1">
+            <text x={x(last.t) - 6} y={height - pad.b - 8} textAnchor="end" fontSize="11" fill="#94A3B8">
               12 bulan terakhir disembunyikan
             </text>
           </>
@@ -202,8 +201,8 @@ function HistoryChart({ sim, model }: { sim: SimulateResponse; model: ModelId })
         <circle cx={x(last.t)} cy={y(last.v)} r="3.5" fill="#E2E8F0" />
 
         <text
-          x={labelLeft ? x(target.t) - 10 : x(target.t) + 10}
-          y={Math.max(pad.t + 12, y(target.hi) - 6)}
+          x={labelLeft ? x(target.t) + 4 : x(target.t) + 10}
+          y={target.v < from.v ? Math.min(height - pad.b - 4, y(target.lo) + 16) : Math.max(pad.t + 12, y(target.hi) - 8)}
           textAnchor={labelLeft ? "end" : "start"}
           fontSize="12"
           fontWeight="600"
@@ -217,8 +216,15 @@ function HistoryChart({ sim, model }: { sim: SimulateResponse; model: ModelId })
 }
 
 function BarList({ items }: { items: FeatureImportanceItem[] }) {
-  const top = items.filter((i) => i.importance > 0).slice(0, 5);
+  const top = items.filter((i) => i.importance >= 0.01).slice(0, 5);
   const max = top[0]?.importance ?? 1;
+  if (top.length === 1) {
+    return (
+      <p className="mt-1 text-[13px] leading-relaxed text-[#CBD5E1]">
+        {FEATURE_LABEL[top[0].feature] ?? top[0].feature}, {pct0(top[0].importance)}. Fitur lain masing-masing di bawah 1%.
+      </p>
+    );
+  }
   return (
     <ul className="mt-2 space-y-1.5">
       {top.map((i) => (
@@ -300,8 +306,10 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
       guesses: "Peluang masuk tiap pita: dekat puncak, stabil, menurun, jatuh tajam.",
       result: sim?.predicted_trend ? (
         <>
-          {TREND_META[sim.predicted_trend].label}, peluang {pct0(sim.trend_probabilities?.[sim.predicted_trend] ?? 0)}. Tebakan
-          harganya jatuh hampir tepat di batas dua pita, jadi peluangnya terbelah.
+          {TREND_META[sim.predicted_trend].label}, peluang {pct0(sim.trend_probabilities?.[sim.predicted_trend] ?? 0)}.{" "}
+          {(sim.trend_probabilities?.[sim.predicted_trend] ?? 0) < 0.6
+            ? "Tebakan harganya jatuh dekat batas dua pita, jadi peluangnya terbelah."
+            : "Tebakan harganya jauh dari batas pita, jadi model cukup yakin."}
         </>
       ) : null,
       tested: trend ? (
@@ -356,47 +364,100 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
   };
   const d = detail[model];
 
-  const steps = [
+  const repairs = (card?.repairs ?? {}) as Record<string, number>;
+  const calRows = tasks?.forecast.intervals.n_calibration;
+  const candidates = clean.models.filter((m) => !m.name.startsWith("Persistence")).length;
+  const features = tasks?.forecast.features.length;
+  const workflow: { stage: string; code: string; does: string; figure: string; unit: string }[] = [
     {
-      label: "Data mentah",
-      figure: card ? num(card.valuation_points) : num(ds.history_rows),
-      unit: "valuasi",
-      note: `${num(ds.total_players)} pemain lima liga top Eropa${card ? `, ${card.first_valuation.slice(0, 4)} sampai ${card.data_as_of.slice(0, 4)}` : ""}`,
+      stage: "Baca dua CSV",
+      code: "load_data()",
+      does: "transfermarkt_player_values.csv berisi satu baris per pemain. transfermarkt_value_history.csv berisi satu baris per valuasi.",
+      figure: num(ds.history_rows),
+      unit: `valuasi, ${num(ds.total_players)} pemain`,
     },
     {
-      label: "Dijadikan soal",
+      stage: "Bersihkan",
+      code: "load_data()",
+      does: `Valuasi nol atau negatif dibuang (${num(repairs.history_rows_dropped_nonpositive ?? 0)}). Posisi ${num(repairs.positions_repaired_from_sidecar ?? 0)} pemain lama yang kolomnya bergeser diperbaiki dari player_profile_patch.csv. Usia diambil dari riwayat, bukan dari kolom CSV.`,
+      figure: card ? num(card.valuation_points) : "-",
+      unit: "valuasi dipakai",
+    },
+    {
+      stage: "Potong riwayat jadi soal",
+      code: "build_panel()",
+      does: "Untuk tiap update harga: semua valuasi sebelumnya jadi bahan, harga update itu jadi jawaban. Satu pemain menyumbang banyak soal.",
       figure: ds.panel_rows ? num(ds.panel_rows) : "-",
       unit: "soal",
-      note: "Tiap update harga jadi satu soal: riwayat sebelumnya, lalu harga sesudahnya",
     },
     {
-      label: "Dipakai melatih",
-      figure: ds.train_rows ? num(ds.train_rows) : "-",
-      unit: "soal",
-      note: `Update sejak 2021 milik ${num(ds.train_size)} pemain`,
+      stage: "Hitung fitur",
+      code: "features.py",
+      does: "Harga terakhir, jarak dari puncak, arah dan laju perubahan, usia, lama karier, ditambah liga, posisi, kebangsaan. Semua dihitung dari bahan saja. Kolom ringkasan CSV tidak dipakai karena memuat jawaban.",
+      figure: features ? num(features) : "-",
+      unit: "fitur per soal",
     },
     {
-      label: "Disisihkan untuk uji",
+      stage: "Pisahkan pemain uji",
+      code: "train_test_split",
+      does: "Pembagian per pemain, bukan per baris, supaya soal dari pemain yang sama tidak ada di dua sisi.",
       figure: num(ds.test_size),
-      unit: "pemain",
-      note: "Tidak satu pun barisnya ikut melatih",
+      unit: `pemain uji, ${num(ds.train_size)} latih`,
     },
     {
-      label: "Diuji lagi ke masa depan",
+      stage: "Pilih jenis model",
+      code: "GroupKFold(5)",
+      does: `${candidates} kandidat dibandingkan lewat validasi silang di pemain latih saja. Data uji tidak disentuh. Terpilih: ${clean.best_model} untuk tren, ${tasks?.forecast.best_model ?? "-"} untuk harga.`,
+      figure: num(candidates),
+      unit: "kandidat",
+    },
+    {
+      stage: "Latih",
+      code: "train_all()",
+      does: `Model harga, tren, dan nilai wajar belajar dari soal sejak 2021. Model 12 bulan punya soal sendiri: riwayat, lalu harga setahun kemudian${overview.outlook ? ` (${num(overview.outlook.train_rows)} soal sejak 2019)` : ""}.`,
+      figure: ds.train_rows ? num(ds.train_rows) : "-",
+      unit: "soal latih",
+    },
+    {
+      stage: "Kalibrasi",
+      code: "fit_conformal()",
+      does: "Peluang dikalibrasi supaya 70% benar-benar berarti 70 dari 100. Rentang harga dikoreksi pada pemain yang tidak ikut melatih, sampai 8 dari 10 harga asli masuk di dalamnya.",
+      figure: calRows ? num(calRows) : "-",
+      unit: "soal kalibrasi",
+    },
+    {
+      stage: "Uji",
+      code: "report.py",
+      does: `Sekali pada pemain uji, sekali lagi ke masa depan: model dilatih hanya dari data sebelum ${oot ? dateId(oot.cutoff) : "-"} lalu menebak update sesudahnya.`,
       figure: oot ? num(oot.sets.unseen_players_future.rows) : "-",
-      unit: "update",
-      note: `Setelah ${oot ? dateId(oot.cutoff) : "-"}, model hanya tahu data sebelum itu`,
+      unit: "update masa depan",
+    },
+    {
+      stage: "Sajikan",
+      code: "main.py",
+      does: "Model disimpan dan dipakai API. Simulator menghitung fitur dengan kode yang sama dengan saat melatih. Dilatih ulang hanya kalau data atau kode berubah.",
+      figure: mc ? num(mc.training_seconds / 60) : "-",
+      unit: "menit sekali latih",
     },
   ];
 
   const prev = leak?.previous_pipeline?.reported_clean_classifier.accuracy;
+  const prevSim = leak?.previous_pipeline?.simulate_endpoint_classifier.accuracy;
   const leakRows = leak
     ? [
         ...(prev ? [{ name: "Pipeline lama", note: "memakai kolom ringkasan CSV", value: prev, bad: true }] : []),
-        { name: "Model sekarang", note: "hanya riwayat sebelum target", value: leak.contamination_test.without_csv_columns.accuracy, bad: false },
+        ...(prevSim
+          ? [{ name: "Simulator lama", note: "fiturnya ditebak dari form, tidak sama dengan saat melatih", value: prevSim, bad: true }]
+          : []),
         {
-          name: "Model sekarang + 4 kolom itu",
-          note: "uji ulang untuk membuktikan",
+          name: "Uji ulang tanpa 4 kolom itu",
+          note: "model pembanding, hanya riwayat sebelum target",
+          value: leak.contamination_test.without_csv_columns.accuracy,
+          bad: false,
+        },
+        {
+          name: "Uji ulang dengan 4 kolom itu",
+          note: "model yang sama, kolom bocor ditambahkan",
           value: leak.contamination_test.with_csv_columns.accuracy,
           bad: true,
         },
@@ -548,15 +609,28 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
       </section>
 
       <section className={panel}>
-        <h3 className="px-5 pt-4 text-base font-semibold text-[#F1F5F9]">Dari data mentah sampai angka uji</h3>
-        <ol className="grid divide-y divide-[#243244] sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-5 lg:divide-x">
-          {steps.map((s) => (
-            <li key={s.label} className="px-5 py-4">
-              <p className="text-[13px] text-[#94A3B8]">{s.label}</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-[#F1F5F9]">
-                {s.figure} <span className="text-[13px] font-normal text-[#7C8BA1]">{s.unit}</span>
+        <div className="px-5 pt-4">
+          <h3 className="text-base font-semibold text-[#F1F5F9]">Alur kerja dari CSV sampai model</h3>
+          <p className="mt-1 text-[13px] text-[#94A3B8]">
+            Urutan yang dijalankan tiap kali model dilatih. Angka di kanan adalah hasil tahap itu pada data sekarang.
+          </p>
+        </div>
+        <ol className="mt-3">
+          {workflow.map((w, i) => (
+            <li
+              key={w.stage}
+              className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-3 gap-y-1 border-t border-[#1B2634] px-5 py-3 sm:grid-cols-[1.5rem_13rem_minmax(0,1fr)_11rem] sm:gap-x-5"
+            >
+              <span className="pt-px text-[13px] tabular-nums text-[#7C8BA1]">{i + 1}</span>
+              <div>
+                <p className="text-sm font-semibold text-[#F1F5F9]">{w.stage}</p>
+                <code className="text-xs text-[#7C8BA1]">{w.code}</code>
+              </div>
+              <p className="col-start-2 text-[13px] leading-relaxed text-[#CBD5E1] sm:col-start-3">{w.does}</p>
+              <p className="col-start-2 text-[13px] text-[#94A3B8] sm:col-start-4 sm:text-right">
+                <span className="text-lg font-semibold tabular-nums text-[#F1F5F9]">{w.figure}</span>
+                <span className="block text-xs">{w.unit}</span>
               </p>
-              <p className="mt-1 text-[13px] leading-snug text-[#94A3B8]">{s.note}</p>
             </li>
           ))}
         </ol>
@@ -602,7 +676,8 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
           </table>
           {leak ? (
             <p className="mt-3 text-xs leading-relaxed text-[#7C8BA1]">
-              Kuning berarti angkanya terbantu bocoran. Empat kolom yang diuji: {leak.contamination_test.columns_added.join(", ")}.
+              Kuning berarti angkanya tidak bisa dipercaya: terbantu bocoran, atau fiturnya tidak sama dengan saat melatih. Empat
+              kolom yang diuji: {leak.contamination_test.columns_added.join(", ")}.
             </p>
           ) : null}
         </section>
@@ -642,42 +717,56 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
         </section>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-        <section className={`${panel} p-5`}>
-          <h3 className="text-base font-semibold text-[#F1F5F9]">Yang tidak bisa dijawab model ini</h3>
-          <ul className="mt-3 space-y-2.5 text-[13px] leading-relaxed text-[#CBD5E1]">
-            <li>Kualitas bermain. Yang ditebak adalah nilai pasar Transfermarkt, bukan harga transfer dan bukan performa.</li>
-            <li>Lonjakan atau cedera mendadak. Tidak ada data pertandingan, jadi model baru tahu setelah harganya berubah.</li>
-            <li>Pindah klub. Riwayat klub di data hanya benar untuk 508 dari {num(ds.total_players)} pemain.</li>
-            <li>
-              Pemain di luar daftar. Data hanya berisi pemain yang pada 2025 sudah bermain di liga top, sehingga proyeksi pemain
-              muda cenderung terlalu optimistis.
-            </li>
-            <li>Rentang untuk pemain di atas €50M. Hanya 59 sampai 67% yang masuk rentang, padahal targetnya 80%.</li>
-          </ul>
-        </section>
+      <section className={`${panel} p-5`}>
+        <h3 className="text-base font-semibold text-[#F1F5F9]">Yang tidak bisa dijawab model ini</h3>
+        <ul className="mt-3 grid gap-x-8 gap-y-2.5 text-[13px] leading-relaxed text-[#CBD5E1] md:grid-cols-2 xl:grid-cols-3">
+          <li>
+            <span className="font-semibold text-[#F1F5F9]">Kualitas bermain.</span> Yang ditebak adalah nilai pasar Transfermarkt,
+            bukan harga transfer dan bukan performa.
+          </li>
+          <li>
+            <span className="font-semibold text-[#F1F5F9]">Lonjakan atau cedera mendadak.</span> Tidak ada data pertandingan,
+            jadi model baru tahu setelah harganya berubah.
+          </li>
+          <li>
+            <span className="font-semibold text-[#F1F5F9]">Pindah klub.</span> Riwayat klub di data hanya benar untuk 508 dari{" "}
+            {num(ds.total_players)} pemain.
+          </li>
+          <li>
+            <span className="font-semibold text-[#F1F5F9]">Pemain di luar daftar.</span> Data hanya berisi pemain yang pada 2025
+            sudah di liga top, sehingga proyeksi pemain muda cenderung terlalu optimistis.
+          </li>
+          <li>
+            <span className="font-semibold text-[#F1F5F9]">Rentang pemain di atas €50M.</span> Hanya 59 sampai 67% harga asli
+            yang masuk rentang, padahal targetnya 80%.
+          </li>
+          <li>
+            <span className="font-semibold text-[#F1F5F9]">Performa musim lalu.</span> Sudah dicoba ditambahkan (penampilan, gol,
+            transfer, cedera) dan tidak menaikkan akurasi: harga sudah memuatnya.
+          </li>
+        </ul>
+      </section>
 
-        <section className={`${panel} p-5`}>
-          <h3 className="text-base font-semibold text-[#F1F5F9]">Istilah yang dipakai di situs ini</h3>
-          <dl className="mt-3 grid gap-x-8 gap-y-3 text-[13px] leading-relaxed sm:grid-cols-2">
-            {[
-              ["Update harga", "Satu kali Transfermarkt merevisi nilai pasar pemain. Rata-rata tiap lima bulan."],
-              ["Tren 4 kelas", "Posisi harga terhadap puncak karier: dekat puncak, 20 sampai 30% di bawah, 30 sampai 60% di bawah, atau lebih."],
-              ["Tebakan tanpa model", "Menganggap harga atau kelasnya sama seperti terakhir. Pembanding wajib untuk setiap angka."],
-              ["Bocor (leakage)", "Fitur yang diam-diam memuat jawaban. Membuat akurasi tampak tinggi tapi tidak berlaku untuk masa depan."],
-              ["Rentang 80%", "Batas bawah dan atas tebakan. Dikalibrasi supaya 8 dari 10 harga asli jatuh di dalamnya."],
-              ["Uji ke masa depan", "Model dilatih hanya dari data sebelum satu tanggal, lalu diuji pada update sesudahnya."],
-              ["Skala log", "Mengukur selisih dalam persen, bukan Euro, supaya pemain murah dan mahal dinilai setara."],
-              ["Sinyal beli / risiko", "Hanya muncul kalau peluang naik atau turun lebih dari 5% dalam setahun minimal 70%."],
-            ].map(([term, desc]) => (
-              <div key={term}>
-                <dt className="font-semibold text-[#F1F5F9]">{term}</dt>
-                <dd className="text-[#94A3B8]">{desc}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      </div>
+      <section className={`${panel} p-5`}>
+        <h3 className="text-base font-semibold text-[#F1F5F9]">Istilah yang dipakai di situs ini</h3>
+        <dl className="mt-3 grid gap-x-8 gap-y-3 text-[13px] leading-relaxed sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            ["Update harga", "Satu kali Transfermarkt merevisi nilai pasar pemain. Rata-rata tiap lima bulan."],
+            ["Tren 4 kelas", "Posisi harga terhadap puncak karier: dekat puncak, 20 sampai 30% di bawah, 30 sampai 60% di bawah, atau lebih."],
+            ["Tebakan tanpa model", "Menganggap harga atau kelasnya sama seperti terakhir. Pembanding wajib untuk setiap angka."],
+            ["Bocor (leakage)", "Fitur yang diam-diam memuat jawaban. Akurasi tampak tinggi tapi tidak berlaku untuk masa depan."],
+            ["Rentang 80%", "Batas bawah dan atas tebakan. Dikalibrasi supaya 8 dari 10 harga asli jatuh di dalamnya."],
+            ["Uji ke masa depan", "Model dilatih hanya dari data sebelum satu tanggal, lalu diuji pada update sesudahnya."],
+            ["Skala log", "Mengukur selisih dalam persen, bukan Euro, supaya pemain murah dan mahal dinilai setara."],
+            ["Sinyal beli / risiko", "Hanya muncul kalau peluang naik atau turun lebih dari 5% dalam setahun minimal 70%."],
+          ].map(([term, desc]) => (
+            <div key={term}>
+              <dt className="font-semibold text-[#F1F5F9]">{term}</dt>
+              <dd className="text-[#94A3B8]">{desc}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
     </div>
   );
 }
