@@ -1,10 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
-
-import { ClubBadge, PlayerAvatar } from "@/components/entity-media";
+import {
+  Badge,
+  Button,
+  Disclosure,
+  EmptyState,
+  PageHeader,
+  Panel,
+  PanelDividerCell,
+  PanelDividerGrid,
+  PlayerCell,
+  SectionHeader,
+  Segmented,
+  Stat,
+} from "@/components/ui";
 import type { OutlookRow, TestPredictionsResponse } from "@/lib/api";
 import { fmt } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 const POSITION_ID: Record<string, string> = {
   Goalkeeper: "Kiper",
@@ -28,6 +41,11 @@ const BUDGETS = [
   { label: "Sampai €25M", max: 25e6 },
   { label: "Sampai €50M", max: 50e6 },
 ];
+
+const BUDGET_OPTIONS = BUDGETS.map((b, i) => ({
+  value: String(i),
+  label: b.label,
+}));
 
 const outOfTen = (p: number) => `${Math.round(p * 10)} dari 10`;
 const pct0 = (x: number) => `${Math.round(x * 100)}%`;
@@ -53,10 +71,12 @@ function reasonText(r: OutlookRow, tone: "buy" | "risk"): string {
 }
 
 function PlayerList({ rows, tone }: { rows: OutlookRow[]; tone: "buy" | "risk" }) {
-  const color = tone === "buy" ? "text-[#34D399]" : "text-[#F0816E]";
-  const bar = tone === "buy" ? "bg-[#10B981]" : "bg-[#D9604C]";
   if (!rows.length) {
-    return <p className="border-t border-[#1B2634] py-6 text-center text-[13px] text-[#94A3B8]">Tidak ada pemain di rentang harga ini.</p>;
+    return (
+      <div className="py-8 text-center">
+        <p className="text-[13px] text-muted">Tidak ada pemain di rentang harga ini.</p>
+      </div>
+    );
   }
   return (
     <ul>
@@ -64,27 +84,50 @@ function PlayerList({ rows, tone }: { rows: OutlookRow[]; tone: "buy" | "risk" }
         const chance = tone === "buy" ? r.p_up : r.p_down;
         const why = reasonText(r, tone);
         return (
-          <li key={r.player_id} className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 border-t border-[#1B2634] py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
-            <PlayerAvatar playerId={r.player_id} name={r.name} size={40} />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-[#F1F5F9]">{r.name}</p>
-              <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-[#94A3B8]">
-                <ClubBadge playerId={r.player_id} club={r.peak_club} size={12} />
-                <span>· {r.age} tahun</span>
-                {POSITION_ID[r.position] ? <span>· {POSITION_ID[r.position]}</span> : null}
-              </p>
-              {why ? <p className="mt-1 text-xs leading-relaxed text-[#7C8BA1]">Kenapa: {why}.</p> : null}
+          <li
+            key={r.player_id}
+            className="flex flex-col gap-2 py-3 border-b border-rule last:border-b-0 sm:flex-row sm:items-start sm:justify-between"
+          >
+            <div className="min-w-0 flex-1">
+              <PlayerCell
+                playerId={r.player_id}
+                name={r.name}
+                club={r.peak_club}
+                meta={`${r.age} tahun${POSITION_ID[r.position] ? ` · ${POSITION_ID[r.position]}` : ""}`}
+                avatarSize={36}
+              />
+              {why ? (
+                <p className="mt-1 pl-12 text-[13px] leading-relaxed text-muted">
+                  Kenapa: {why}.
+                </p>
+              ) : null}
             </div>
-            <div className="col-span-2 sm:col-span-1 sm:text-right">
-              <p className="whitespace-nowrap text-[13px] tabular-nums text-[#CBD5E1]">
-                {fmt.eurShort(r.current_value_eur)} <span className="text-[#7C8BA1]">menjadi sekitar</span>{" "}
-                <span className={`font-semibold ${color}`}>{fmt.eurShort(r.expected_value_eur)}</span>
+
+            <div className="shrink-0 text-left sm:text-right pl-12 sm:pl-0 sm:ml-4">
+              <p className="text-[13px] tabular-nums text-ink">
+                {fmt.eurShort(r.current_value_eur)}{" "}
+                <span className="text-muted">menjadi sekitar</span>{" "}
+                <span
+                  className={cn(
+                    "font-semibold",
+                    tone === "buy" ? "text-positive" : "text-negative"
+                  )}
+                >
+                  {fmt.eurShort(r.expected_value_eur)}
+                </span>
               </p>
-              <p className="mt-0.5 text-xs text-[#94A3B8]">
-                Peluang {tone === "buy" ? "naik" : "turun"} <span className="font-semibold text-[#F1F5F9]">{outOfTen(chance)}</span>
+              <p className="mt-0.5 text-xs text-muted tabular-nums">
+                Peluang {tone === "buy" ? "naik" : "turun"}{" "}
+                <span className="font-semibold text-ink">{outOfTen(chance)}</span>
               </p>
-              <span className="mt-1.5 block h-1 rounded-full bg-[#1B2634] sm:ml-auto sm:w-32">
-                <span className={`block h-1 rounded-full ${bar}`} style={{ width: `${chance * 100}%` }} />
+              <span className="mt-1.5 block h-1 w-28 sm:w-32 rounded-full bg-rule sm:ml-auto overflow-hidden">
+                <span
+                  className={cn(
+                    "block h-full rounded-full transition-all",
+                    tone === "buy" ? "bg-positive" : "bg-negative"
+                  )}
+                  style={{ width: `${Math.min(100, Math.max(0, chance * 100))}%` }}
+                />
               </span>
             </div>
           </li>
@@ -107,141 +150,141 @@ export function RecommendationsPanel({ preds }: { preds: TestPredictionsResponse
 
   if (!outlook) {
     return (
-      <p className="rounded-xl border border-[#243244] bg-[#121A24] p-5 text-sm text-[#94A3B8]">
-        Data proyeksi 12 bulan belum tersedia.
-      </p>
+      <EmptyState
+        title="Data Belum Tersedia"
+        description="Data proyeksi 12 bulan belum tersedia."
+      />
     );
   }
   const v = outlook.validation;
-  const panel = "rounded-xl border border-[#243244] bg-[#121A24]";
   const risk = outlook.depreciation_risk;
 
   return (
     <div className="space-y-5">
-      <div className="max-w-3xl">
-        <h2 className="text-2xl font-semibold tracking-tight text-[#F1F5F9]">Siapa yang nilainya naik, siapa yang turun</h2>
-        <p className="mt-1.5 text-sm leading-relaxed text-[#CBD5E1]">
-          Model memperkirakan nilai pasar tiap pemain setahun dari sekarang. Daftar di bawah hanya memuat pemain yang peluang
-          naik atau turunnya besar: dari {fmt.int(Object.values(outlook.signal_counts).reduce((a, b) => a + b, 0))} pemain,{" "}
-          {outlook.signal_counts.Buy} diperkirakan naik dan {outlook.signal_counts.DepreciationRisk} diperkirakan turun. Sisanya
-          tidak cukup jelas arahnya, jadi tidak ditampilkan.
-        </p>
+      <PageHeader
+        title="Kandidat Beli & Risiko Turun — Proyeksi 12 Bulan"
+        subtitle={`Model memperkirakan nilai pasar tiap pemain setahun dari sekarang. Daftar di bawah hanya memuat pemain yang peluang naik atau turunnya besar: dari ${fmt.int(
+          Object.values(outlook.signal_counts).reduce((a, b) => a + b, 0)
+        )} pemain, ${outlook.signal_counts.Buy} diperkirakan naik dan ${
+          outlook.signal_counts.DepreciationRisk
+        } diperkirakan turun. Sisanya tidak cukup jelas arahnya, jadi tidak ditampilkan.`}
+      />
+
+      <Panel padding="none">
+        <PanelDividerGrid cols={3}>
+          <PanelDividerCell>
+            <Stat
+              label='Perkiraan "naik"'
+              value={outOfTen(v.buy.went_up ?? 0)}
+              description={`Perkiraan "naik" di masa lalu ternyata benar naik (${pct0(v.buy.went_up ?? 0)} dari ${v.buy.n} pemain).`}
+            />
+          </PanelDividerCell>
+          <PanelDividerCell>
+            <Stat
+              label='Perkiraan "turun"'
+              value={outOfTen(v.depreciation_risk.went_down ?? 0)}
+              description={`Perkiraan "turun" di masa lalu ternyata benar turun (${pct0(v.depreciation_risk.went_down ?? 0)} dari ${v.depreciation_risk.n} pemain).`}
+            />
+          </PanelDividerCell>
+          <PanelDividerCell>
+            <Stat
+              label="Pembanding acak"
+              value={outOfTen(v.base_rate.up)}
+              description="Pemain naik nilainya kalau dipilih acak. Itu pembandingnya."
+            />
+          </PanelDividerCell>
+        </PanelDividerGrid>
+      </Panel>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-xs font-medium text-muted">Batas harga</span>
+        <Segmented
+          options={BUDGET_OPTIONS}
+          value={String(budget)}
+          onChange={(val) => {
+            setBudget(Number(val));
+            setMoreBuy(false);
+          }}
+          ariaLabel="Batas harga"
+          size="sm"
+        />
       </div>
 
-      <section className={panel}>
-        <h3 className="px-5 pt-4 text-base font-semibold text-[#F1F5F9]">Seberapa bisa dipercaya</h3>
-        <div className="grid divide-y divide-[#243244] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-          {[
-            {
-              figure: outOfTen(v.buy.went_up ?? 0),
-              text: `perkiraan "naik" di masa lalu ternyata benar naik (${pct0(v.buy.went_up ?? 0)} dari ${v.buy.n} pemain).`,
-            },
-            {
-              figure: outOfTen(v.depreciation_risk.went_down ?? 0),
-              text: `perkiraan "turun" di masa lalu ternyata benar turun (${pct0(v.depreciation_risk.went_down ?? 0)} dari ${v.depreciation_risk.n} pemain).`,
-            },
-            {
-              figure: outOfTen(v.base_rate.up),
-              text: "pemain naik nilainya kalau dipilih acak. Itu pembandingnya.",
-            },
-          ].map((c) => (
-            <p key={c.text} className="px-5 py-4 text-[13px] leading-relaxed text-[#CBD5E1]">
-              <span className="block text-2xl font-semibold tabular-nums text-[#F1F5F9]">{c.figure}</span>
-              {c.text}
-            </p>
-          ))}
-        </div>
-      </section>
-
-      <div className="grid items-start gap-5 xl:grid-cols-2">
-        <section className={`${panel} px-5 pt-4 pb-2`}>
-          <h3 className="text-base font-semibold text-[#F1F5F9]">Diperkirakan naik</h3>
-          <p className="mt-1 text-[13px] leading-relaxed text-[#CBD5E1]">
-            Kandidat untuk dibeli sekarang. Diurutkan dari kenaikan nilai terbesar dalam Euro.
-          </p>
-          <div role="tablist" aria-label="Batas harga" className="mt-3 mb-3 inline-flex flex-wrap gap-1 rounded-lg bg-[#0B1117] p-1">
-            {BUDGETS.map((b, i) => (
-              <button
-                key={b.label}
-                role="tab"
-                type="button"
-                aria-selected={budget === i}
-                onClick={() => {
-                  setBudget(i);
-                  setMoreBuy(false);
-                }}
-                className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition ${
-                  budget === i ? "bg-[#243244] text-[#F1F5F9]" : "text-[#94A3B8] hover:text-[#F1F5F9]"
-                }`}
-              >
-                {b.label}
-              </button>
-            ))}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <Panel className="flex flex-col">
+          <SectionHeader
+            title="Kandidat Beli"
+            subtitle="Kandidat untuk dibeli sekarang. Diurutkan dari kenaikan nilai terbesar dalam Euro."
+            actions={<Badge variant="mint">{buy.length}</Badge>}
+          />
+          <div className="mt-3 mb-3">
+            <PlayerList rows={buy.slice(0, moreBuy ? 30 : 6)} tone="buy" />
           </div>
-          <PlayerList rows={buy.slice(0, moreBuy ? 30 : 6)} tone="buy" />
           {buy.length > 6 ? (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full"
               onClick={() => setMoreBuy((m) => !m)}
-              className="w-full border-t border-[#1B2634] py-3 text-[13px] font-medium text-[#94A3B8] hover:text-[#F1F5F9]"
             >
-              {moreBuy ? "Tampilkan lebih sedikit" : `Tampilkan ${buy.length - 6} pemain lagi`}
-            </button>
+              {moreBuy ? "Tampilkan ringkas" : "Tampilkan semua"}
+            </Button>
           ) : null}
-        </section>
+        </Panel>
 
-        <section className={`${panel} px-5 pt-4 pb-2`}>
-          <h3 className="text-base font-semibold text-[#F1F5F9]">Diperkirakan turun</h3>
-          <p className="mt-1 mb-3 text-[13px] leading-relaxed text-[#CBD5E1]">
-            Sebaiknya tidak dibeli mahal, atau dijual selagi nilainya tinggi. Ini bukan berarti mainnya jelek: nilai pasar pemain
-            bintang biasanya menyusut setelah usia 27 sampai 28.
-          </p>
-          <PlayerList rows={risk.slice(0, moreRisk ? 30 : 6)} tone="risk" />
+        <Panel className="flex flex-col">
+          <SectionHeader
+            title="Risiko Turun"
+            subtitle="Sebaiknya tidak dibeli mahal, atau dijual selagi nilainya tinggi. Ini bukan berarti mainnya jelek: nilai pasar pemain bintang biasanya menyusut setelah usia 27 sampai 28."
+            actions={<Badge variant="crimson">{risk.length}</Badge>}
+          />
+          <div className="mt-3 mb-3">
+            <PlayerList rows={risk.slice(0, moreRisk ? 30 : 6)} tone="risk" />
+          </div>
           {risk.length > 6 ? (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full"
               onClick={() => setMoreRisk((m) => !m)}
-              className="w-full border-t border-[#1B2634] py-3 text-[13px] font-medium text-[#94A3B8] hover:text-[#F1F5F9]"
             >
-              {moreRisk ? "Tampilkan lebih sedikit" : `Tampilkan ${risk.length - 6} pemain lagi`}
-            </button>
+              {moreRisk ? "Tampilkan ringkas" : "Tampilkan semua"}
+            </Button>
           ) : null}
-        </section>
+        </Panel>
       </div>
 
-      <details className={`${panel} group`}>
-        <summary className="cursor-pointer list-none px-5 py-4 text-base font-semibold text-[#F1F5F9] marker:hidden">
-          Cara daftar ini dibuat dan batasannya
-          <span className="ml-2 text-[13px] font-normal text-[#7C8BA1] group-open:hidden">buka</span>
-          <span className="ml-2 hidden text-[13px] font-normal text-[#7C8BA1] group-open:inline">tutup</span>
-        </summary>
-        <ul className="grid gap-x-8 gap-y-2.5 border-t border-[#243244] px-5 py-4 text-[13px] leading-relaxed text-[#CBD5E1] md:grid-cols-2">
+      <Disclosure
+        title="Cara daftar ini dibuat dan batasannya"
+        summary="buka"
+      >
+        <ul className="grid gap-x-8 gap-y-3 text-[13px] leading-relaxed text-muted md:grid-cols-2">
           <li>
-            <span className="font-semibold text-[#F1F5F9]">Syarat masuk daftar.</span> Peluang nilainya berubah lebih dari 5%
-            dalam setahun minimal {pct0(outlook.threshold)}, dan nilai sekarang minimal {fmt.eurShort(outlook.min_value_eur)}.
+            <strong className="font-semibold text-ink">Syarat masuk daftar.</strong>{" "}
+            Peluang nilainya berubah lebih dari 5% dalam setahun minimal {pct0(outlook.threshold)}, dan nilai sekarang minimal {fmt.eurShort(outlook.min_value_eur)}.
           </li>
           <li>
-            <span className="font-semibold text-[#F1F5F9]">Cara mengujinya.</span> Model dilatih hanya dari data sebelum{" "}
-            {v.cutoff}, lalu perkiraannya dicocokkan dengan harga {fmt.int(v.test_players)} pemain sesudah tanggal itu.
+            <strong className="font-semibold text-ink">Cara mengujinya.</strong>{" "}
+            Model dilatih hanya dari data sebelum {v.cutoff}, lalu perkiraannya dicocokkan dengan harga {fmt.int(v.test_players)} pemain sesudah tanggal itu.
           </li>
           <li>
-            <span className="font-semibold text-[#F1F5F9]">Yang diperkirakan.</span> Nilai pasar versi Transfermarkt, bukan harga
-            transfer dan bukan kualitas bermain.
+            <strong className="font-semibold text-ink">Yang diperkirakan.</strong>{" "}
+            Nilai pasar versi Transfermarkt, bukan harga transfer dan bukan kualitas bermain.
           </li>
           <li>
-            <span className="font-semibold text-[#F1F5F9]">Yang tidak diketahui model.</span> Gol, menit bermain, cedera, dan
-            kontrak. Semua itu baru terbaca setelah harganya berubah.
+            <strong className="font-semibold text-ink">Yang tidak diketahui model.</strong>{" "}
+            Gol, menit bermain, cedera, dan kontrak. Semua itu baru terbaca setelah harganya berubah.
           </li>
           <li>
-            <span className="font-semibold text-[#F1F5F9]">Pemain muda cenderung terlalu optimistis.</span> Data hanya berisi
-            pemain yang berhasil sampai liga top, jadi pemain muda yang gagal tidak ikut dipelajari.
+            <strong className="font-semibold text-ink">Pemain muda cenderung terlalu optimistis.</strong>{" "}
+            Data hanya berisi pemain yang berhasil sampai liga top, jadi pemain muda yang gagal tidak ikut dipelajari.
           </li>
           <li>
-            <span className="font-semibold text-[#F1F5F9]">Harga jatuh bukan tanda murah.</span> Dari pemain yang harganya jatuh
-            lebih dari 40% dalam setahun, hanya {pct0(v.fell_over_40pct_prior_12m.went_up ?? 0)} yang naik lagi.
+            <strong className="font-semibold text-ink">Harga jatuh bukan tanda murah.</strong>{" "}
+            Dari pemain yang harganya jatuh lebih dari 40% dalam setahun, hanya {pct0(v.fell_over_40pct_prior_12m.went_up ?? 0)} yang naik lagi.
           </li>
         </ul>
-      </details>
+      </Disclosure>
     </div>
   );
 }

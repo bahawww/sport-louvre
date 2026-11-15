@@ -1,12 +1,26 @@
 "use client";
 
-import { Download } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Download } from "lucide-react";
 
-import { ClubBadge, LeagueBadge, PlayerAvatar } from "@/components/entity-media";
+import { LeagueBadge } from "@/components/entity-media";
 import { TrajectoryBadge } from "@/components/trajectory-badge";
-import { useApi, type DatasetsResponse } from "@/lib/api";
+import {
+  Badge,
+  buttonVariants,
+  DataTable,
+  type DataTableColumn,
+  ErrorState,
+  PageHeader,
+  Pagination,
+  Panel,
+  PanelSkeleton,
+  PlayerCell,
+  SectionHeader,
+} from "@/components/ui";
+import { useApi, type DatasetPlayerRow, type DatasetsResponse } from "@/lib/api";
 import { fmt } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(2)} MB`;
@@ -35,177 +49,213 @@ export function DatasetPanel() {
       );
     });
   }, [res.data, search, league]);
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageRows = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, Math.max(0, totalPages - 1));
+  const pageRows = useMemo(
+    () => filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE),
+    [filtered, safePage]
+  );
+
+  const columns = useMemo<DataTableColumn<DatasetPlayerRow>[]>(
+    () => [
+      {
+        key: "rank",
+        header: "#",
+        align: "right",
+        headerClassName: "w-12",
+        className: "w-12 text-muted tabular-nums whitespace-nowrap",
+        cell: (_row, index) => safePage * PAGE_SIZE + index + 1,
+      },
+      {
+        key: "player",
+        header: "Pemain",
+        align: "left",
+        headerClassName: "min-w-[200px]",
+        className: "min-w-[200px]",
+        cell: (row) => (
+          <PlayerCell
+            playerId={row.player_id}
+            name={row.name}
+            club={row.peak_club}
+            meta={row.nationality}
+            avatarSize={32}
+            showClubLogo={true}
+          />
+        ),
+      },
+      {
+        key: "league",
+        header: "Liga",
+        align: "left",
+        headerClassName: "min-w-[130px]",
+        className: "min-w-[130px] text-muted whitespace-nowrap",
+        cell: (row) => <LeagueBadge league={row.league_name} size={14} />,
+      },
+      {
+        key: "trajectory",
+        header: "Tren",
+        align: "left",
+        headerClassName: "min-w-[120px]",
+        className: "min-w-[120px] whitespace-nowrap",
+        cell: (row) => <TrajectoryBadge value={row.trajectory} />,
+      },
+      {
+        key: "age",
+        header: "Usia",
+        align: "right",
+        headerClassName: "min-w-[60px]",
+        className: "min-w-[60px] text-muted tabular-nums whitespace-nowrap",
+        cell: (row) => (row.age !== null ? row.age : "—"),
+      },
+      {
+        key: "current_value",
+        header: "Nilai Kini",
+        align: "right",
+        headerClassName: "min-w-[95px]",
+        className: "min-w-[95px] font-semibold text-ink tabular-nums whitespace-nowrap",
+        cell: (row) => fmt.eur(row.current_value_eur),
+      },
+      {
+        key: "peak_value",
+        header: "Puncak",
+        align: "right",
+        headerClassName: "min-w-[95px]",
+        className: "min-w-[95px] text-muted tabular-nums whitespace-nowrap",
+        cell: (row) => fmt.eur(row.peak_value_eur),
+      },
+      {
+        key: "career_span",
+        header: "Karier",
+        align: "right",
+        headerClassName: "min-w-[75px]",
+        className: "min-w-[75px] text-muted tabular-nums whitespace-nowrap",
+        cell: (row) =>
+          row.career_span_years != null
+            ? `${row.career_span_years.toFixed(1)} thn`
+            : "—",
+      },
+      {
+        key: "valuation_points",
+        header: "Titik",
+        align: "right",
+        headerClassName: "min-w-[60px]",
+        className: "min-w-[60px] text-muted tabular-nums whitespace-nowrap",
+        cell: (row) => row.num_valuation_points,
+      },
+    ],
+    [safePage]
+  );
 
   if (res.isLoading) {
-    return (
-      <div className="rounded-xl border border-[#243244] bg-[#121A24] p-8 text-center text-sm text-[#94A3B8]">
-        Memuat katalog dataset lengkap...
-      </div>
-    );
+    return <PanelSkeleton />;
   }
 
   if (res.isError || !res.data) {
     return (
-      <div className="rounded-xl border border-rose-500/30 bg-[#121A24] p-6 text-sm text-rose-400">
-        Gagal memuat daftar dataset.
-      </div>
+      <ErrorState
+        title="Gagal Memuat Dataset"
+        description="Gagal memuat katalog dataset dari server. Pastikan service backend aktif."
+        onRetry={() => res.refetch()}
+      />
     );
   }
 
+  const players = res.data.players;
+
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <PageHeader
+        title="Dataset & Unduhan"
+        subtitle="Unduh dataset Transfermarkt 2025/2026 dalam format CSV atau Parquet, atau telusuri seluruh 2.418 pemain."
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
         {res.data.files.map((f) => (
-          <div
-            key={f.filename}
-            className="flex flex-col justify-between rounded-xl border border-[#243244] bg-[#121A24] p-5"
-          >
+          <Panel key={f.filename} className="flex flex-col justify-between gap-4">
             <div>
               <div className="flex items-center justify-between gap-2">
-                <span className="rounded bg-[#182230] px-2 py-0.5 text-[11px] font-bold text-[#10B981]">
-                  {f.format}
+                <Badge variant="neutral">{f.format}</Badge>
+                <span className="text-xs text-muted tabular-nums">
+                  {formatBytes(f.size_bytes)}
                 </span>
-                <span className="text-xs text-[#94A3B8]">{formatBytes(f.size_bytes)}</span>
               </div>
-              <h3 className="mt-3 text-sm font-bold text-[#F1F5F9]">{f.label}</h3>
-              <p className="mt-1 text-xs leading-relaxed text-[#94A3B8]">{f.description}</p>
-              <p className="mt-2 text-[11px] text-[#64748B]">
+              <h3 className="mt-3 text-sm font-semibold text-ink">{f.label}</h3>
+              <p className="mt-1 text-[13px] text-muted leading-relaxed">{f.description}</p>
+              <p className="mt-2 text-xs text-faint tabular-nums">
                 {fmt.int(f.rows)} baris · {f.columns} kolom
               </p>
             </div>
             <a
               href={f.download_url}
               download={f.filename}
-              className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-[#10B981] px-3 py-2 text-xs font-bold text-[#0B1117] transition hover:bg-[#059669]"
+              className={cn(
+                buttonVariants({ variant: "secondary", size: "sm" }),
+                "w-full mt-auto"
+              )}
             >
-              <Download className="size-3.5" />
-              Unduh {f.format}
+              <Download className="size-4 shrink-0" aria-hidden="true" />
+              <span>Unduh {f.format}</span>
             </a>
-          </div>
+          </Panel>
         ))}
       </div>
 
-      <div className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-bold text-[#F1F5F9]">
-              Dataset Total Pemain ({filtered.length} / {res.data.total_players})
-            </h3>
-            <p className="mt-0.5 text-xs text-[#94A3B8]">
-              Seluruh {fmt.int(res.data.total_players)} pemain Transfermarkt 2025/2026 dari 5 liga top Eropa.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <input
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(0);
-              }}
-              placeholder="Cari nama, klub, atau negara..."
-              className="w-56 rounded-lg border border-[#243244] bg-[#0B1117] px-3 py-1.5 text-xs text-[#F1F5F9] placeholder-[#64748B]"
-            />
-            <select
-              value={league}
-              onChange={(e) => {
-                setLeague(e.target.value);
-                setPage(0);
-              }}
-              className="rounded-lg border border-[#243244] bg-[#0B1117] px-3 py-1.5 text-xs text-[#F1F5F9]"
-            >
-              <option value="ALL">Semua Liga</option>
-              <option value="Premier League">Premier League</option>
-              <option value="La Liga">La Liga</option>
-              <option value="Serie A">Serie A</option>
-              <option value="Bundesliga">Bundesliga</option>
-              <option value="Ligue 1">Ligue 1</option>
-            </select>
-          </div>
-        </div>
+      <Panel className="space-y-4">
+        <SectionHeader
+          title={`Dataset Total Pemain (${filtered.length} / ${players.length})`}
+          subtitle="Seluruh 2.418 pemain Transfermarkt 2025/2026 dari 5 liga top Eropa."
+          actions={
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(0);
+                }}
+                placeholder="Cari nama, klub, atau negara..."
+                className="w-full sm:w-60 min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-[13px] text-ink placeholder:text-muted focus-visible:outline-2 focus-visible:outline-accent"
+                aria-label="Cari nama, klub, atau negara"
+              />
+              <select
+                value={league}
+                onChange={(e) => {
+                  setLeague(e.target.value);
+                  setPage(0);
+                }}
+                className="min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-accent"
+                aria-label="Filter berdasarkan liga"
+              >
+                <option value="ALL">Semua Liga</option>
+                <option value="Premier League">Premier League</option>
+                <option value="La Liga">La Liga</option>
+                <option value="Serie A">Serie A</option>
+                <option value="Bundesliga">Bundesliga</option>
+                <option value="Ligue 1">Ligue 1</option>
+              </select>
+            </div>
+          }
+        />
 
-        <div className="mt-4 max-h-[460px] overflow-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 z-20 border-b border-[#243244] bg-[#121A24] text-[#94A3B8]">
-              <tr>
-                <th className="py-2 pr-3">#</th>
-                <th className="py-2 pr-3">Pemain</th>
-                <th className="py-2 px-3">Liga</th>
-                <th className="py-2 px-3">Trajectory</th>
-                <th className="py-2 px-3 text-right">Usia</th>
-                <th className="py-2 px-3 text-right">Current Value</th>
-                <th className="py-2 px-3 text-right">Peak Value</th>
-                <th className="py-2 pl-3 text-right">Titik</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#1E293B]">
-              {pageRows.map((p, i) => {
-                const idx = page * PAGE_SIZE + i;
-                return (
-                <tr key={p.player_id} className="hover:bg-[#182230]/60">
-                  <td className="py-2 pr-3 text-[#64748B]">{idx + 1}</td>
-                  <td className="py-2 pr-3">
-                    <div className="flex items-center gap-2.5">
-                      <PlayerAvatar playerId={p.player_id} name={p.name} size={30} />
-                      <div className="min-w-0">
-                        <span className="block truncate font-semibold text-[#F1F5F9]">{p.name}</span>
-                        <span className="mt-0.5 flex items-center gap-1 text-[11px] text-[#94A3B8]">
-                          <ClubBadge playerId={p.player_id} club={p.peak_club} size={12} />
-                          <span>· {p.nationality}</span>
-                        </span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-2 px-3 text-[#94A3B8]">
-                    <LeagueBadge league={p.league_name} size={14} />
-                  </td>
-                  <td className="py-2 px-3">
-                    <TrajectoryBadge value={p.trajectory} />
-                  </td>
-                  <td className="py-2 px-3 text-right text-[#94A3B8]">{p.age ?? "—"}</td>
-                  <td className="py-2 px-3 text-right font-bold text-[#10B981]">
-                    {fmt.eur(p.current_value_eur)}
-                  </td>
-                  <td className="py-2 px-3 text-right text-[#F59E0B]">
-                    {fmt.eur(p.peak_value_eur)}
-                  </td>
-                  <td className="py-2 pl-3 text-right text-[#94A3B8]">{p.num_valuation_points}</td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-[#94A3B8]">
-          <span>
-            {filtered.length === 0
-              ? "Tidak ada pemain yang cocok."
-              : `Menampilkan ${page * PAGE_SIZE + 1} sampai ${Math.min(filtered.length, (page + 1) * PAGE_SIZE)} dari ${filtered.length} pemain`}
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((x) => Math.max(0, x - 1))}
-              disabled={page === 0}
-              className="rounded-lg border border-[#243244] px-3 py-1.5 font-medium text-[#F1F5F9] hover:border-[#94A3B8] disabled:opacity-40"
-            >
-              Sebelumnya
-            </button>
-            <span className="tabular-nums">
-              Halaman {page + 1} dari {pages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPage((x) => Math.min(pages - 1, x + 1))}
-              disabled={page >= pages - 1}
-              className="rounded-lg border border-[#243244] px-3 py-1.5 font-medium text-[#F1F5F9] hover:border-[#94A3B8] disabled:opacity-40"
-            >
-              Berikutnya
-            </button>
-          </span>
-        </div>
-      </div>
+        <DataTable
+          columns={columns}
+          rows={pageRows}
+          rowKey={(p) => p.player_id}
+          framed={true}
+          emptyMessage="Tidak ada pemain yang cocok dengan filter pencarian."
+          ariaLabel="Tabel dataset pemain"
+        />
+
+        <Pagination
+          page={safePage + 1}
+          totalPages={totalPages}
+          totalItems={filtered.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={(p) => setPage(p - 1)}
+          unitLabel="pemain"
+        />
+      </Panel>
     </div>
   );
 }

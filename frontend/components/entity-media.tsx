@@ -63,7 +63,7 @@ export function PlayerAvatar({
   return (
     <span
       style={{ width: size, height: size }}
-      className={`relative inline-flex shrink-0 items-end justify-center overflow-hidden rounded-full bg-gradient-to-b from-[#233044] to-[#131C29] text-[10px] font-bold text-[#94A3B8] ring-1 ring-white/15 shadow-sm ${className}`}
+      className={`relative inline-flex shrink-0 items-end justify-center overflow-hidden rounded-full bg-raised text-muted border border-border-subtle text-xs font-bold ${className}`}
     >
       {src && !failed ? (
         <img
@@ -74,7 +74,7 @@ export function PlayerAvatar({
           width={size}
           height={size}
           onError={() => setStage((s) => (s === 0 && thumb ? 1 : 2))}
-          className="h-full w-full object-contain object-bottom px-[2px] pt-[3px] drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]"
+          className="h-full w-full object-contain object-bottom px-[2px] pt-[3px]"
         />
       ) : (
         <span className="self-center">{getInitials(name)}</span>
@@ -119,10 +119,10 @@ export function ClubBadge({
           style={{ width: size + 2, height: size + 2 }}
           decoding="async"
           onError={() => setStage((x) => (x === 0 && thumb ? 1 : 2))}
-          className="shrink-0 object-contain drop-shadow-[0_0_1.5px_rgba(255,255,255,0.35)]"
+          className="shrink-0 object-contain"
         />
       ) : (
-        <Shield style={{ width: size, height: size }} className="shrink-0 text-[#64748B]" />
+        <Shield style={{ width: size, height: size }} className="shrink-0 text-faint" />
       )}
       {showName ? <span className="truncate">{resolvedClub}</span> : null}
     </span>
@@ -155,7 +155,7 @@ export function LeagueBadge({
           loading="lazy"
           style={{ width: size + 2, height: size + 2 }}
           onError={() => setFailed(true)}
-          className="shrink-0 object-contain drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)]"
+          className="shrink-0 object-contain"
         />
       ) : null}
       {showName ? <span className="truncate">{league}</span> : null}

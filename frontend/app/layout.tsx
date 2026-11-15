@@ -21,13 +21,13 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0B1117",
+  colorScheme: "dark light",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="id" className={jakarta.variable}>
-      <body className="min-h-dvh bg-[#0B1117] text-[#F1F5F9]">
+    <html lang="id" className={jakarta.variable} suppressHydrationWarning>
+      <body className="min-h-dvh bg-ground text-ink antialiased">
         <Providers>{children}</Providers>
       </body>
     </html>

@@ -1,109 +1,157 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { type ComponentType, useEffect, useState } from "react";
+import { useTheme } from "next-themes";
 
-import { LogoMark } from "@/components/logo-mark";
-import { useApi, type OverviewResponse, type TestPredictionsResponse } from "@/lib/api";
+import {
+  useApi,
+  type OverviewResponse,
+  type TestPredictionsResponse,
+} from "@/lib/api";
 
-// Each tab is its own chunk: the first paint does not pay for ECharts or for tabs never opened.
-const loading = () => (
-  <div className="rounded-xl border border-[#243244] bg-[#121A24] p-8 text-center text-sm text-[#94A3B8]">Memuat...</div>
-);
+const loading = () => <div className="sh-load" aria-busy="true" aria-label="Memuat panel" />;
+
+type PanelProps = { overview: OverviewResponse; preds: TestPredictionsResponse };
+
 const ArenaPanel = dynamic(() => import("@/components/panels/ArenaPanel").then((m) => m.ArenaPanel), { loading });
 const DiagnosticsPanel = dynamic(() => import("@/components/panels/DiagnosticsPanel").then((m) => m.DiagnosticsPanel), { loading });
 const ErrorAnalysisPanel = dynamic(() => import("@/components/panels/ErrorAnalysisPanel").then((m) => m.ErrorAnalysisPanel), { loading });
-const TrajectoryExplorerPanel = dynamic(
-  () => import("@/components/panels/TrajectoryExplorerPanel").then((m) => m.TrajectoryExplorerPanel),
-  { loading },
-);
-const ScoutingSimulatorPanel = dynamic(
-  () => import("@/components/panels/ScoutingSimulatorPanel").then((m) => m.ScoutingSimulatorPanel),
-  { loading },
-);
-const RecommendationsPanel = dynamic(
-  () => import("@/components/panels/RecommendationsPanel").then((m) => m.RecommendationsPanel),
-  { loading },
-);
+const TrajectoryExplorerPanel = dynamic(() => import("@/components/panels/TrajectoryExplorerPanel").then((m) => m.TrajectoryExplorerPanel), { loading });
+const ScoutingSimulatorPanel = dynamic(() => import("@/components/panels/ScoutingSimulatorPanel").then((m) => m.ScoutingSimulatorPanel), { loading });
+const RecommendationsPanel = dynamic(() => import("@/components/panels/RecommendationsPanel").then((m) => m.RecommendationsPanel), { loading });
 const DatasetPanel = dynamic(() => import("@/components/panels/DatasetPanel").then((m) => m.DatasetPanel), { loading });
 const PenjelasanPanel = dynamic(() => import("@/components/panels/PenjelasanPanel").then((m) => m.PenjelasanPanel), { loading });
 
+const PANELS: Record<TabId, ComponentType<PanelProps>> = {
+  arena: ArenaPanel as ComponentType<PanelProps>,
+  diagnostics: DiagnosticsPanel as ComponentType<PanelProps>,
+  errors: ErrorAnalysisPanel as ComponentType<PanelProps>,
+  history: TrajectoryExplorerPanel as ComponentType<PanelProps>,
+  simulator: ScoutingSimulatorPanel as ComponentType<PanelProps>,
+  recommendations: RecommendationsPanel as ComponentType<PanelProps>,
+  datasets: DatasetPanel as ComponentType<PanelProps>,
+  penjelasan: PenjelasanPanel as ComponentType<PanelProps>,
+};
+
 const TABS = [
-  { id: "arena", label: "KPI & Model Arena" },
-  { id: "diagnostics", label: "Confusion & Scatter" },
-  { id: "errors", label: "Analisis Kesalahan" },
-  { id: "history", label: "Tren Karir" },
-  { id: "simulator", label: "Scouting Simulator" },
-  { id: "recommendations", label: "Rekomendasi Klub" },
-  { id: "datasets", label: "Dataset Total" },
-  { id: "penjelasan", label: "Penjelasan & Workflow" },
+  ["arena", "KPI & Model Arena"],
+  ["diagnostics", "Confusion & Scatter"],
+  ["errors", "Analisis Kesalahan"],
+  ["history", "Tren Karir"],
+  ["simulator", "Scouting Simulator"],
+  ["recommendations", "Rekomendasi Klub"],
+  ["datasets", "Dataset Total"],
+  ["penjelasan", "Penjelasan & Workflow"],
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type TabId = (typeof TABS)[number][0];
+
+function readTab(): TabId {
+  const p = new URLSearchParams(location.search).get("tab");
+  return TABS.some((t) => t[0] === p) ? (p as TabId) : "arena";
+}
 
 export default function DashboardPage() {
-  const [tab, setTab] = useState<TabId>("arena");
+  const [tab, setTab] = useState<TabId | null>(null);
+  const [open, setOpen] = useState(false);
+  const { resolvedTheme, setTheme } = useTheme();
+
+  useEffect(() => {
+    setTab(readTab());
+    const onPop = () => setTab(readTab());
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    addEventListener("popstate", onPop);
+    addEventListener("keydown", onKey);
+    return () => {
+      removeEventListener("popstate", onPop);
+      removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  const selectTab = (id: TabId) => {
+    setTab(id);
+    setOpen(false);
+    history.pushState(null, "", id === "arena" ? location.pathname : `?tab=${id}`);
+  };
+
+  const isDark = resolvedTheme !== "light";
+  const toggleTheme = () => setTheme(isDark ? "light" : "dark");
   const overview = useApi<OverviewResponse>("/overview");
   const preds = useApi<TestPredictionsResponse>("/test-predictions");
+  const ActivePanel = PANELS[tab ?? "arena"];
 
   return (
-    <div className="min-h-dvh bg-[#0B1117] text-[#F1F5F9]">
-      <header className="sticky top-0 z-20 border-b border-[#243244] bg-[#0B1117]/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
-            <LogoMark size={28} />
-            <div>
-              <h1 className="text-base font-extrabold tracking-tight text-[#F1F5F9]">
-                Sport Louvre
-              </h1>
-              <p className="text-[11px] text-[#94A3B8]">
-                Transfermarkt 2025/2026 · Football Transfer Value Intelligence
-              </p>
-            </div>
-          </div>
+    <div className="sh-root">
+      {open && <div className="sh-back" onClick={() => setOpen(false)} aria-hidden="true" />}
 
-          <nav className="flex flex-wrap gap-1.5" aria-label="Dashboard tabs">
-            {TABS.map((t) => {
-              const active = tab === t.id;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setTab(t.id)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                    active
-                      ? "bg-[#10B981] text-[#0B1117]"
-                      : "bg-[#121A24] text-[#94A3B8] hover:bg-[#182230] hover:text-[#F1F5F9]"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
-          </nav>
+      <aside aria-label="Menu navigasi" className={open ? "sh-aside open" : "sh-aside"}>
+        <div className="sh-head">
+          <div>
+            <b className="sh-title">Sport Louvre</b>
+            <p className="sh-sub">Transfermarkt 2025/2026</p>
+          </div>
+          <button type="button" onClick={() => setOpen(false)} className="sh-ibtn sh-hide-lg" aria-label="Tutup menu">
+            Tutup
+          </button>
         </div>
+
+        <nav aria-label="Navigasi utama" className="sh-nav">
+          {TABS.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => selectTab(id)}
+              aria-current={tab === id ? "page" : undefined}
+              className={tab === id ? "sh-tab on" : "sh-tab"}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="sh-foot">
+          <button type="button" onClick={toggleTheme} className="sh-theme" aria-label="Ganti tema">
+            <span>{isDark ? "Tema Gelap" : "Tema Terang"}</span>
+            <span className="sh-sub">{isDark ? "Ke Terang" : "Ke Gelap"}</span>
+          </button>
+          {overview.data && (
+            <p className="sh-sub">
+              {overview.data.dataset.total_players.toLocaleString("id-ID")} pemain · {overview.data.dataset.leagues.length} liga
+            </p>
+          )}
+        </div>
+      </aside>
+
+      <header className="sh-top">
+        <button type="button" onClick={() => setOpen(true)} className="sh-ibtn" aria-label="Buka menu navigasi" aria-expanded={open}>
+          Menu
+        </button>
+        <b className="sh-title">Sport Louvre</b>
+        <button type="button" onClick={toggleTheme} className="sh-ibtn" aria-label="Ganti tema">
+          {isDark ? "Terang" : "Gelap"}
+        </button>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-        {overview.isLoading || preds.isLoading ? (
-          <div className="rounded-xl border border-[#243244] bg-[#121A24] p-8 text-center text-sm text-[#94A3B8]">
-            Memuat model ML dan data evaluasi Transfermarkt...
-          </div>
+      <main className="sh-main">
+        {!tab || overview.isLoading || preds.isLoading ? (
+          loading()
         ) : overview.isError || preds.isError || !overview.data || !preds.data ? (
-          <div className="rounded-xl border border-rose-500/30 bg-[#121A24] p-6 text-sm text-rose-400">
-            Gagal memuat data API. Pastikan service backend sehat.
+          <div role="alert" className="sh-err">
+            Gagal memuat data API.{" "}
+            <button
+              type="button"
+              onClick={() => {
+                overview.refetch();
+                preds.refetch();
+              }}
+              className="sh-retry"
+            >
+              Coba lagi
+            </button>
           </div>
         ) : (
-          <>
-            {tab === "arena" && <ArenaPanel overview={overview.data} preds={preds.data} />}
-            {tab === "diagnostics" && <DiagnosticsPanel overview={overview.data} preds={preds.data} />}
-            {tab === "errors" && <ErrorAnalysisPanel overview={overview.data} preds={preds.data} />}
-            {tab === "history" && <TrajectoryExplorerPanel />}
-            {tab === "simulator" && <ScoutingSimulatorPanel />}
-            {tab === "recommendations" && <RecommendationsPanel preds={preds.data} />}
-            {tab === "datasets" && <DatasetPanel />}
-            {tab === "penjelasan" && <PenjelasanPanel overview={overview.data} />}
-          </>
+          <ActivePanel overview={overview.data} preds={preds.data} />
         )}
       </main>
     </div>

@@ -2,13 +2,23 @@
 
 import { useMemo, useState } from "react";
 
-import { EChart } from "@/components/chart";
-import { ClubBadge, LeagueBadge, PlayerAvatar } from "@/components/entity-media";
-import { TrajectoryBadge } from "@/components/trajectory-badge";
-import type { OverviewResponse, TestPredictionsResponse } from "@/lib/api";
+import { chartTooltipBase, EChart, useChartTheme } from "@/components/chart";
+import { LeagueBadge } from "@/components/entity-media";
+import {
+  Badge,
+  DataTable,
+  type DataTableColumn,
+  PageHeader,
+  Panel,
+  PlayerCell,
+  SectionHeader,
+  Segmented,
+} from "@/components/ui";
+import type { OverviewResponse, TestPredictionRow, TestPredictionsResponse } from "@/lib/api";
 import { fmt, trajectoryLabel, TREND_META } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
-function TrendChip({
+function TrendBadge({
   trend,
   fallback,
   wrong = false,
@@ -18,17 +28,44 @@ function TrendChip({
   wrong?: boolean;
 }) {
   const meta = trend ? TREND_META[trend] : undefined;
-  if (!meta) return <TrajectoryBadge value={fallback} />;
+  if (!meta) {
+    return (
+      <Badge className={wrong ? "ring-1 ring-negative" : undefined}>
+        {trajectoryLabel(fallback)}
+      </Badge>
+    );
+  }
   return (
-    <span
-      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${meta.className} ${
-        wrong ? "ring-1 ring-[#EF4444]" : ""
-      }`}
-    >
+    <Badge className={cn(meta.className, wrong && "ring-1 ring-negative")}>
       {meta.label}
-    </span>
+    </Badge>
   );
 }
+
+interface ValidationRow {
+  skema: string;
+  accuracyTrend: string;
+  baseline: string;
+  macroF1: string;
+  detail5Class: string;
+  forecastR2: string;
+  fundamentalR2: string;
+}
+
+const VIEW_OPTIONS = [
+  { value: "trend", label: "4 Kelas" },
+  { value: "detail", label: "5 Kelas" },
+] as const;
+
+const MODE_OPTIONS = [
+  { value: "clean", label: "Clean" },
+  { value: "leakage", label: "Leakage" },
+] as const;
+
+const VALUE_MODEL_OPTIONS = [
+  { value: "forecast", label: "Forecast" },
+  { value: "fundamental", label: "Fundamental" },
+] as const;
 
 export function DiagnosticsPanel({
   overview,
@@ -71,13 +108,16 @@ export function DiagnosticsPanel({
     : mode === "clean"
       ? overview.classification.clean_mode.models
       : overview.classification.leakage_mode.models;
-  const activeCls = clsModels[modelIdx] ?? clsModels[0];
+  const safeModelIdx = modelIdx < clsModels.length ? modelIdx : 0;
+  const activeCls = clsModels[safeModelIdx] ?? clsModels[0];
   const classes: string[] = showTrend ? trend.classes : overview.classification.classes;
   const classLabel = (c: string) => (showTrend ? (TREND_META[c]?.label ?? c) : trajectoryLabel(c));
   const baselineCls = clsModels.find((m) => m.name.startsWith("Persistence"));
   const PERSIST = "Persistence (last state)";
   const ootTrend = (name: string) =>
     (oot?.classification[name] as unknown as { trend?: Record<string, number> } | undefined)?.trend;
+
+  const theme = useChartTheme();
 
   const scatterOption = useMemo(() => {
     const rows = preds.rows;
@@ -92,39 +132,37 @@ export function DiagnosticsPanel({
       backgroundColor: "transparent",
       tooltip: {
         trigger: "item",
-        backgroundColor: "#182230",
-        borderColor: "#243244",
-        textStyle: { color: "#F1F5F9" },
+        ...chartTooltipBase(theme),
         formatter: (p: { data: [number, number, string, string] }) => {
           const [act, prd, name, club] = p.data;
           return `<strong>${name}</strong> (${club})<br/>Aktual: ${fmt.eur(act)}<br/>Prediksi: ${fmt.eur(prd)}<br/>Residual: ${fmt.eur(prd - act)}`;
         },
       },
-      grid: { left: 64, right: 20, top: 20, bottom: 44 },
+      grid: { left: 56, right: 20, top: 24, bottom: 38 },
       xAxis: {
         type: "log",
         min: minVal,
         name: "Aktual (€)",
         nameLocation: "middle",
-        nameGap: 28,
-        nameTextStyle: { color: "#94A3B8", fontSize: 11 },
-        axisLabel: { color: "#94A3B8", fontSize: 11, formatter: (v: number) => fmt.eurShort(v) },
-        splitLine: { lineStyle: { color: "#1E293B" } },
+        nameGap: 24,
+        nameTextStyle: { color: theme.axisInk, fontSize: 11 },
+        axisLabel: { color: theme.axisInk, fontSize: 11, formatter: (v: number) => fmt.eurShort(v) },
+        splitLine: { lineStyle: { color: theme.grid } },
       },
       yAxis: {
         type: "log",
         min: minVal,
         name: "Prediksi (€)",
-        nameTextStyle: { color: "#94A3B8", fontSize: 11 },
-        axisLabel: { color: "#94A3B8", fontSize: 11, formatter: (v: number) => fmt.eurShort(v) },
-        splitLine: { lineStyle: { color: "#1E293B" } },
+        nameTextStyle: { color: theme.axisInk, fontSize: 11 },
+        axisLabel: { color: theme.axisInk, fontSize: 11, formatter: (v: number) => fmt.eurShort(v) },
+        splitLine: { lineStyle: { color: theme.grid } },
       },
       series: [
         {
           type: "line",
           symbol: "none",
           silent: true,
-          lineStyle: { type: "dashed", color: "#475569", width: 1.5 },
+          lineStyle: { type: "dashed", color: theme.muted, width: 1.5 },
           data: [
             [minVal, minVal],
             [maxVal, maxVal],
@@ -132,20 +170,20 @@ export function DiagnosticsPanel({
         },
         {
           type: "scatter",
-          symbolSize: 9,
+          symbolSize: 8,
           itemStyle: {
             color: (p: { data: [number, number] }) =>
               p.data[1] > p.data[0] * 1.25
-                ? "#10B981"
+                ? theme.chart1
                 : p.data[1] < p.data[0] * 0.8
-                  ? "#EF4444"
-                  : "#38BDF8",
+                  ? theme.chart4
+                  : theme.chart2,
           },
           data: rows.map((r) => [r.actual_value_eur, predOf(r), r.name, r.peak_club]),
         },
       ],
     };
-  }, [preds, valueModel]);
+  }, [preds, valueModel, theme]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -160,352 +198,479 @@ export function DiagnosticsPanel({
     });
   }, [preds, search, statusFilter]);
 
+  const validationRows = useMemo<ValidationRow[]>(() => {
+    if (!tasks || !holdoutClf) return [];
+    const list: ValidationRow[] = [
+      {
+        skema: "Holdout 80:20 per pemain",
+        accuracyTrend: trend ? fmt.pct(trend.headline.metrics.accuracy) : "-",
+        baseline: trend ? fmt.pct(trend.headline.persistence.accuracy) : "-",
+        macroF1: trend ? fmt.pct(trend.headline.metrics.macro_f1) : "-",
+        detail5Class: fmt.pct(holdoutClf.accuracy),
+        forecastR2:
+          tasks.forecast.models.find((m) => m.name === tasks.forecast.best_model)?.r2_log?.toFixed(3) ??
+          "-",
+        fundamentalR2:
+          tasks.fundamental.models.find((m) => m.name === tasks.fundamental.best_model)?.r2_log?.toFixed(3) ??
+          "-",
+      },
+    ];
+
+    if (cvClf) {
+      list.push({
+        skema: "GroupKFold 5-fold (rata-rata)",
+        accuracyTrend: cvTrend
+          ? `${fmt.pct(cvTrend.accuracy_mean)} ± ${(cvTrend.accuracy_std * 100).toFixed(1)}`
+          : "-",
+        baseline: cvTrendBase ? fmt.pct(cvTrendBase.accuracy_mean) : "-",
+        macroF1: cvTrend ? fmt.pct(cvTrend.macro_f1_mean) : "-",
+        detail5Class: fmt.pct(cvClf.accuracy_mean),
+        forecastR2:
+          tasks.forecast.validation.group_kfold[tasks.forecast.best_model]?.r2_log_mean.toFixed(3) ?? "-",
+        fundamentalR2:
+          tasks.fundamental.validation.group_kfold[tasks.fundamental.best_model]?.r2_log_mean.toFixed(3) ?? "-",
+      });
+    }
+
+    if (oot && ootClf) {
+      const bestOotTrend = ootTrend(cleanBlock.best_model);
+      const persistOotTrend = ootTrend(PERSIST);
+      list.push({
+        skema: `Out-of-time (${oot.rows} update)`,
+        accuracyTrend: bestOotTrend ? fmt.pct(bestOotTrend.accuracy) : "-",
+        baseline: persistOotTrend ? fmt.pct(persistOotTrend.accuracy) : "-",
+        macroF1: bestOotTrend ? fmt.pct(bestOotTrend.macro_f1) : "-",
+        detail5Class: fmt.pct(ootClf.accuracy),
+        forecastR2: oot.regression.forecast[tasks.forecast.best_model]?.r2_log.toFixed(3) ?? "-",
+        fundamentalR2: oot.regression.fundamental[tasks.fundamental.best_model]?.r2_log.toFixed(3) ?? "-",
+      });
+    }
+
+    return list;
+  }, [tasks, holdoutClf, trend, cvClf, cvTrend, cvTrendBase, oot, ootClf, cleanBlock.best_model]);
+
+  const validationColumns: DataTableColumn<ValidationRow>[] = [
+    {
+      key: "skema",
+      header: "Skema",
+      align: "left",
+      cell: (r) => <span className="font-semibold text-ink">{r.skema}</span>,
+    },
+    {
+      key: "accuracyTrend",
+      header: "Akurasi Tren (4 kelas)",
+      align: "right",
+      cell: (r) => <span className="font-bold text-positive">{r.accuracyTrend}</span>,
+    },
+    {
+      key: "baseline",
+      header: "Baseline tanpa model",
+      align: "right",
+      cell: (r) => <span className="text-muted">{r.baseline}</span>,
+    },
+    {
+      key: "macroF1",
+      header: "Macro-F1",
+      align: "right",
+      cell: (r) => <span className="text-ink">{r.macroF1}</span>,
+    },
+    {
+      key: "detail5Class",
+      header: "Rincian 5 kelas",
+      align: "right",
+      cell: (r) => <span className="text-muted">{r.detail5Class}</span>,
+    },
+    {
+      key: "forecastR2",
+      header: "Forecast R² log",
+      align: "right",
+      cell: (r) => <span className="text-ink">{r.forecastR2}</span>,
+    },
+    {
+      key: "fundamentalR2",
+      header: "Fundamental R² log",
+      align: "right",
+      cell: (r) => <span className="text-ink">{r.fundamentalR2}</span>,
+    },
+  ];
+
+  const testTableColumns: DataTableColumn<TestPredictionRow>[] = [
+    {
+      key: "player",
+      header: "Pemain",
+      align: "left",
+      cell: (r) => (
+        <PlayerCell
+          playerId={r.player_id}
+          name={r.name}
+          club={r.peak_club}
+          meta={`${r.age} thn`}
+          avatarSize={28}
+          showClubLogo={true}
+        />
+      ),
+    },
+    {
+      key: "league",
+      header: "Liga",
+      align: "left",
+      cell: (r) => <LeagueBadge league={r.league_name} size={14} className="text-muted" />,
+    },
+    {
+      key: "actual_trend",
+      header: "Tren Aktual",
+      align: "left",
+      cell: (r) => (
+        <TrendBadge trend={r.actual_trend} fallback={r.actual_trajectory} />
+      ),
+    },
+    {
+      key: "pred_trend",
+      header: "Tren Prediksi",
+      align: "left",
+      cell: (r) => (
+        <TrendBadge
+          trend={r.pred_trend}
+          fallback={r.pred_trajectory_clean}
+          wrong={Boolean(r.pred_trend && r.pred_trend !== r.actual_trend)}
+        />
+      ),
+    },
+    {
+      key: "actual_value",
+      header: "Nilai Aktual",
+      align: "right",
+      cell: (r) => <span className="font-semibold text-ink">{fmt.eur(r.actual_value_eur)}</span>,
+    },
+    {
+      key: "forecast",
+      header: "Forecast",
+      align: "right",
+      cell: (r) => (
+        <span className="text-muted">
+          {r.forecast_value_eur !== undefined ? fmt.eur(r.forecast_value_eur) : "-"}
+        </span>
+      ),
+    },
+    {
+      key: "fair_value",
+      header: "Nilai Wajar",
+      align: "right",
+      cell: (r) => <span className="text-muted">{fmt.eur(r.pred_value_eur)}</span>,
+    },
+    {
+      key: "residual",
+      header: "Gap Wajar",
+      align: "right",
+      cell: (r) => {
+        const isPositive = r.residual_eur > 0;
+        const isNegative = r.residual_eur < 0;
+        return (
+          <span
+            className={cn(
+              "font-semibold tabular-nums",
+              isPositive ? "text-positive" : isNegative ? "text-negative" : "text-muted",
+            )}
+          >
+            {isPositive ? "+" : ""}
+            {fmt.eur(r.residual_eur)}
+          </span>
+        );
+      },
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-base font-bold text-[#F1F5F9]">Interactive Confusion Matrix</h3>
-              <p className="text-xs text-[#94A3B8]">
-                Akurasi: <strong className="text-[#10B981]">{fmt.pct(activeCls.accuracy)}</strong>
-                {baselineCls && mode === "clean"
-                  ? ` · baseline tanpa model: ${fmt.pct(baselineCls.accuracy)}`
-                  : ""}
-                {activeCls.macro_f1 !== undefined
-                  ? ` · Macro-F1: ${fmt.pct(activeCls.macro_f1)}`
-                  : ""}
-                {activeCls.ece !== undefined ? ` · ECE: ${activeCls.ece.toFixed(3)}` : ""}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {trend && mode === "clean" ? (
-                <div className="inline-flex rounded-lg border border-[#243244] bg-[#0B1117] p-0.5 text-xs">
-                  {(["trend", "detail"] as const).map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => setView(v)}
-                      className={`rounded-md px-2.5 py-1 font-semibold ${
-                        view === v ? "bg-[#38BDF8] text-[#0B1117]" : "text-[#94A3B8]"
-                      }`}
-                    >
-                      {v === "trend" ? "4 Kelas" : "5 Kelas"}
-                    </button>
-                  ))}
+      <PageHeader
+        title="Diagnostik Prediksi & Kalibrasi"
+        subtitle="Matriks klasifikasi tren, sebaran nilai aktual terhadap prediksi, validasi silang, dan rincian 484 pemain uji."
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <Panel className="flex flex-col">
+          <div>
+            <SectionHeader
+              title="Interactive Confusion Matrix"
+              actions={
+                <div className="flex flex-wrap items-center gap-2">
+                  {trend && mode === "clean" ? (
+                    <Segmented
+                      options={VIEW_OPTIONS}
+                      value={view}
+                      onChange={setView}
+                      ariaLabel="Pilih jumlah kelas klasifikasi"
+                    />
+                  ) : null}
+                  <Segmented
+                    options={MODE_OPTIONS}
+                    value={mode}
+                    onChange={setMode}
+                    ariaLabel="Pilih mode evaluasi"
+                  />
+                  <select
+                    value={safeModelIdx}
+                    onChange={(e) => setModelIdx(Number(e.target.value))}
+                    aria-label="Pilih model klasifikasi"
+                    className="min-h-[44px] lg:min-h-[34px] rounded-control border border-control bg-raised px-3 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-accent"
+                  >
+                    {clsModels.map((m, i) => (
+                      <option key={m.name} value={i}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              ) : null}
-              <div className="inline-flex rounded-lg border border-[#243244] bg-[#0B1117] p-0.5 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setMode("clean")}
-                  className={`rounded-md px-2.5 py-1 font-semibold ${
-                    mode === "clean" ? "bg-[#10B981] text-[#0B1117]" : "text-[#94A3B8]"
-                  }`}
-                >
-                  Clean
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode("leakage")}
-                  className={`rounded-md px-2.5 py-1 font-semibold ${
-                    mode === "leakage" ? "bg-[#F59E0B] text-[#0B1117]" : "text-[#94A3B8]"
-                  }`}
-                >
-                  Leakage
-                </button>
-              </div>
-              <select
-                value={modelIdx}
-                onChange={(e) => setModelIdx(Number(e.target.value))}
-                className="rounded-lg border border-[#243244] bg-[#0B1117] px-2.5 py-1 text-xs text-[#F1F5F9]"
-              >
-                {clsModels.map((m, i) => (
-                  <option key={m.name} value={i}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+              }
+            />
 
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full border-collapse text-center text-xs">
-              <thead>
-                <tr className="text-[#94A3B8]">
-                  <th className="p-2 text-left">Aktual \ Pred</th>
-                  {classes.map((c) => (
-                    <th key={c} className="p-2 font-semibold">
-                      {classLabel(c)}
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th scope="col" className="py-2 pr-3 text-left font-medium text-xs text-muted whitespace-nowrap">
+                      Aktual \ Pred
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {activeCls.confusion_matrix.map((row, ri) => (
-                  <tr key={classes[ri]} className="border-t border-[#1E293B]">
-                    <th className="p-2 text-left font-semibold text-[#F1F5F9]">
-                      {classLabel(classes[ri])}
-                    </th>
-                    {row.map((val, ci) => {
-                      const diag = ri === ci;
-                      return (
-                        <td
-                          key={ci}
-                          className={`p-2 font-bold ${
-                            diag
-                              ? "bg-emerald-500/20 text-emerald-300"
-                              : val > 0
-                                ? "bg-amber-500/10 text-amber-300"
-                                : "text-[#475569]"
-                          }`}
-                        >
-                          {val}
-                        </td>
-                      );
-                    })}
+                    {classes.map((c) => (
+                      <th
+                        key={c}
+                        scope="col"
+                        className="py-2 px-2.5 text-right font-medium text-xs text-muted whitespace-nowrap"
+                      >
+                        {classLabel(c)}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-base font-bold text-[#F1F5F9]">Aktual vs Prediksi (€)</h3>
-            <div className="inline-flex rounded-lg border border-[#243244] bg-[#0B1117] p-0.5 text-xs">
-              {(["forecast", "fundamental"] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setValueModel(v)}
-                  className={`rounded-md px-2.5 py-1 font-semibold ${
-                    valueModel === v ? "bg-[#10B981] text-[#0B1117]" : "text-[#94A3B8]"
-                  }`}
-                >
-                  {v === "forecast" ? "Forecast" : "Fundamental"}
-                </button>
-              ))}
+                </thead>
+                <tbody className="divide-y divide-rule">
+                  {activeCls.confusion_matrix.map((row, ri) => (
+                    <tr key={classes[ri]} className="transition-colors hover:bg-active/30">
+                      <th
+                        scope="row"
+                        className="py-2 pr-3 text-left font-medium text-xs text-ink whitespace-nowrap"
+                      >
+                        {classLabel(classes[ri])}
+                      </th>
+                      {row.map((val, ci) => {
+                        const diag = ri === ci;
+                        return (
+                          <td
+                            key={ci}
+                            className={cn(
+                              "py-2 px-2.5 text-right tabular-nums text-xs font-semibold rounded-chip",
+                              diag
+                                ? "bg-[var(--pill-mint-bg)] text-positive"
+                                : val > 0
+                                  ? "bg-[var(--pill-amber-bg)] text-warning"
+                                  : "text-muted/40 font-normal",
+                            )}
+                          >
+                            {val}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-          <p className="mt-1 text-xs text-[#94A3B8]">
-            {valueModel === "forecast"
-              ? "Menebak update berikutnya dari harga sebelumnya."
-              : "Nilai wajar tanpa harga 12 bulan terakhir."}
-            {activeReg
-              ? ` R² ${activeReg.r2.toFixed(3)} · R² log ${activeReg.r2_log?.toFixed(3) ?? "-"} · MAE ${fmt.eur(activeReg.mae)}.`
-              : ""}{" "}
-            {valueModel === "forecast" && tasks?.forecast.headline
-              ? `Baseline naif (harga terakhir): R² log ${tasks.forecast.headline.naive_last_value.r2_log.toFixed(3)}. `
-              : ""}
-            Skala log. Hijau = prediksi lebih dari 25% di atas aktual, merah = lebih dari 20% di
-            bawah.
-          </p>
-          <div className="mt-3">
-            <EChart option={scatterOption} height={300} label="Scatter plot aktual vs prediksi" />
+
+          <div className="mt-4 pt-3 border-t border-rule flex flex-wrap items-center gap-1.5 text-xs text-muted">
+            <span>Akurasi:</span>
+            <strong className="font-semibold text-positive">{fmt.pct(activeCls.accuracy)}</strong>
+            {baselineCls && mode === "clean" ? (
+              <>
+                <span className="text-faint">·</span>
+                <span>
+                  baseline tanpa model:{" "}
+                  <span className="text-ink font-medium">{fmt.pct(baselineCls.accuracy)}</span>
+                </span>
+              </>
+            ) : null}
+            {activeCls.macro_f1 !== undefined ? (
+              <>
+                <span className="text-faint">·</span>
+                <span>
+                  Macro-F1:{" "}
+                  <span className="text-ink font-medium">{fmt.pct(activeCls.macro_f1)}</span>
+                </span>
+              </>
+            ) : null}
+            {activeCls.ece !== undefined ? (
+              <>
+                <span className="text-faint">·</span>
+                <span>
+                  ECE:{" "}
+                  <span className="text-ink font-medium">{activeCls.ece.toFixed(3)}</span>
+                </span>
+              </>
+            ) : null}
           </div>
-        </div>
+        </Panel>
+
+        <Panel className="flex flex-col">
+          <div>
+            <SectionHeader
+              title="Aktual vs Prediksi (€)"
+              actions={
+                <Segmented
+                  options={VALUE_MODEL_OPTIONS}
+                  value={valueModel}
+                  onChange={setValueModel}
+                  ariaLabel="Pilih model valuasi"
+                />
+              }
+            />
+            <p className="mt-2 text-[13px] text-muted leading-relaxed">
+              {valueModel === "forecast"
+                ? "Menebak update berikutnya dari harga sebelumnya."
+                : "Nilai wajar tanpa harga 12 bulan terakhir."}
+              {activeReg
+                ? ` R² ${activeReg.r2.toFixed(3)} · R² log ${activeReg.r2_log?.toFixed(3) ?? "-"} · MAE ${fmt.eur(activeReg.mae)}.`
+                : ""}{" "}
+              {valueModel === "forecast" && tasks?.forecast.headline
+                ? `Baseline naif (harga terakhir): R² log ${tasks.forecast.headline.naive_last_value.r2_log.toFixed(3)}. `
+                : ""}
+              Skala log. Hijau = prediksi lebih dari 25% di atas aktual, merah = lebih dari 20% di
+              bawah.
+            </p>
+          </div>
+          <div className="mt-3">
+            <EChart option={scatterOption} height={220} label="Scatter plot aktual vs prediksi" />
+          </div>
+        </Panel>
       </div>
 
       {tasks && holdoutClf ? (
-        <div className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
-          <h3 className="text-base font-bold text-[#F1F5F9]">Validasi Berlapis</h3>
-          <p className="mt-1 text-xs text-[#94A3B8]">
-            Model dipilih lewat GroupKFold per pemain, bukan di data uji. Out-of-time: dilatih pada
-            target sebelum {overview.out_of_time?.cutoff}, diuji pada pemain uji sesudahnya.
-          </p>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-[#243244] text-[#94A3B8]">
-                <tr>
-                  <th className="py-2 pr-3">Skema</th>
-                  <th className="py-2 px-3 text-right">Akurasi Tren (4 kelas)</th>
-                  <th className="py-2 px-3 text-right">Baseline tanpa model</th>
-                  <th className="py-2 px-3 text-right">Macro-F1</th>
-                  <th className="py-2 px-3 text-right">Rincian 5 kelas</th>
-                  <th className="py-2 px-3 text-right">Forecast R² log</th>
-                  <th className="py-2 pl-3 text-right">Fundamental R² log</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1E293B] text-[#F1F5F9]">
-                <tr>
-                  <td className="py-2 pr-3 font-semibold">Holdout 80:20 per pemain</td>
-                  <td className="py-2 px-3 text-right font-bold text-[#10B981]">
-                    {trend ? fmt.pct(trend.headline.metrics.accuracy) : "-"}
-                  </td>
-                  <td className="py-2 px-3 text-right text-[#94A3B8]">
-                    {trend ? fmt.pct(trend.headline.persistence.accuracy) : "-"}
-                  </td>
-                  <td className="py-2 px-3 text-right">
-                    {trend ? fmt.pct(trend.headline.metrics.macro_f1) : "-"}
-                  </td>
-                  <td className="py-2 px-3 text-right text-[#94A3B8]">
-                    {fmt.pct(holdoutClf.accuracy)}
-                  </td>
-                  <td className="py-2 px-3 text-right">
-                    {tasks.forecast.models.find((m) => m.name === tasks.forecast.best_model)?.r2_log?.toFixed(3)}
-                  </td>
-                  <td className="py-2 pl-3 text-right">
-                    {tasks.fundamental.models.find((m) => m.name === tasks.fundamental.best_model)?.r2_log?.toFixed(3)}
-                  </td>
-                </tr>
-                {cvClf ? (
-                  <tr>
-                    <td className="py-2 pr-3 font-semibold">GroupKFold 5-fold (rata-rata)</td>
-                    <td className="py-2 px-3 text-right font-bold text-[#10B981]">
-                      {cvTrend
-                        ? `${fmt.pct(cvTrend.accuracy_mean)} ± ${(cvTrend.accuracy_std * 100).toFixed(1)}`
-                        : "-"}
-                    </td>
-                    <td className="py-2 px-3 text-right text-[#94A3B8]">
-                      {cvTrendBase ? fmt.pct(cvTrendBase.accuracy_mean) : "-"}
-                    </td>
-                    <td className="py-2 px-3 text-right">
-                      {cvTrend ? fmt.pct(cvTrend.macro_f1_mean) : "-"}
-                    </td>
-                    <td className="py-2 px-3 text-right text-[#94A3B8]">
-                      {fmt.pct(cvClf.accuracy_mean)}
-                    </td>
-                    <td className="py-2 px-3 text-right">
-                      {tasks.forecast.validation.group_kfold[tasks.forecast.best_model]?.r2_log_mean.toFixed(3)}
-                    </td>
-                    <td className="py-2 pl-3 text-right">
-                      {tasks.fundamental.validation.group_kfold[tasks.fundamental.best_model]?.r2_log_mean.toFixed(3)}
-                    </td>
-                  </tr>
-                ) : null}
-                {oot && ootClf ? (
-                  <tr>
-                    <td className="py-2 pr-3 font-semibold">Out-of-time ({oot.rows} update)</td>
-                    <td className="py-2 px-3 text-right font-bold text-[#10B981]">
-                      {ootTrend(cleanBlock.best_model)
-                        ? fmt.pct(ootTrend(cleanBlock.best_model)!.accuracy)
-                        : "-"}
-                    </td>
-                    <td className="py-2 px-3 text-right text-[#94A3B8]">
-                      {ootTrend(PERSIST) ? fmt.pct(ootTrend(PERSIST)!.accuracy) : "-"}
-                    </td>
-                    <td className="py-2 px-3 text-right">
-                      {ootTrend(cleanBlock.best_model)
-                        ? fmt.pct(ootTrend(cleanBlock.best_model)!.macro_f1)
-                        : "-"}
-                    </td>
-                    <td className="py-2 px-3 text-right text-[#94A3B8]">
-                      {fmt.pct(ootClf.accuracy)}
-                    </td>
-                    <td className="py-2 px-3 text-right">
-                      {oot.regression.forecast[tasks.forecast.best_model]?.r2_log.toFixed(3)}
-                    </td>
-                    <td className="py-2 pl-3 text-right">
-                      {oot.regression.fundamental[tasks.fundamental.best_model]?.r2_log.toFixed(3)}
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-3 text-xs text-[#94A3B8]">
+        <Panel>
+          <SectionHeader
+            title="Validasi Berlapis"
+            subtitle={`Model dipilih lewat GroupKFold per pemain, bukan di data uji. Out-of-time: dilatih pada target sebelum ${overview.out_of_time?.cutoff}, diuji pada pemain uji sesudahnya.`}
+          />
+          <DataTable
+            columns={validationColumns}
+            rows={validationRows}
+            rowKey={(r) => r.skema}
+            framed={true}
+            ariaLabel="Tabel validasi berlapis"
+            className="mt-4"
+          />
+          <p className="mt-3 text-xs text-muted leading-relaxed">
             Interval konformal {Math.round(tasks.forecast.intervals.holdout.level * 100)}%: cakupan
             teruji forecast {fmt.pct(tasks.forecast.intervals.holdout.coverage)}, fundamental{" "}
             {fmt.pct(tasks.fundamental.intervals.holdout.coverage)}, profil{" "}
             {fmt.pct(tasks.profile.intervals.holdout.coverage)}.
           </p>
-        </div>
+        </Panel>
       ) : null}
 
-      <div className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-base font-bold text-[#F1F5F9]">
-            Tabel {fmt.int(preds.rows.length)} Data Uji ({filtered.length} tampil)
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari nama / klub / liga..."
-              className="rounded-lg border border-[#243244] bg-[#0B1117] px-3 py-1.5 text-xs text-[#F1F5F9] placeholder-[#64748B]"
-            />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-lg border border-[#243244] bg-[#0B1117] px-3 py-1.5 text-xs text-[#F1F5F9]"
-            >
-              <option value="ALL">Semua Status</option>
-              <option value="Undervalued">Undervalued</option>
-              <option value="Fair">Fair</option>
-              <option value="Overvalued">Overvalued</option>
-            </select>
-          </div>
-        </div>
+      <Panel>
+        <SectionHeader
+          title={`Tabel ${fmt.int(preds.rows.length)} Data Uji (${filtered.length} tampil)`}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Cari nama / klub / liga..."
+                aria-label="Cari nama, klub, atau liga"
+                className="min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-xs text-ink placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                aria-label="Filter status valuasi"
+                className="min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-accent"
+              >
+                <option value="ALL">Semua Status</option>
+                <option value="Undervalued">Undervalued</option>
+                <option value="Fair">Fair</option>
+                <option value="Overvalued">Overvalued</option>
+              </select>
+            </div>
+          }
+        />
 
-        <div className="mt-4 max-h-[420px] overflow-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 z-20 border-b border-[#243244] bg-[#121A24] text-[#94A3B8]">
-              <tr>
-                <th className="py-2 pr-3">Pemain</th>
-                <th className="py-2 px-3">Liga</th>
-                <th className="py-2 px-3">Tren Aktual</th>
-                <th className="py-2 px-3">Tren Prediksi</th>
-                <th className="py-2 px-3 text-right">Nilai Aktual</th>
-                <th className="py-2 px-3 text-right">Forecast</th>
-                <th className="py-2 px-3 text-right">Nilai Wajar</th>
-                <th className="py-2 pl-3 text-right">Gap Wajar</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#1E293B]">
-              {filtered.map((r) => (
-                <tr key={r.player_id} className="hover:bg-[#182230]/60">
-                  <td className="py-2 pr-3">
-                    <div className="flex items-center gap-2.5">
-                      <PlayerAvatar playerId={r.player_id} name={r.name} size={30} />
-                      <div className="min-w-0">
-                        <span className="block truncate font-semibold text-[#F1F5F9]">{r.name}</span>
-                        <span className="mt-0.5 flex items-center gap-1 text-[11px] text-[#94A3B8]">
-                          <ClubBadge playerId={r.player_id} club={r.peak_club} size={12} />
-                          <span>· {r.age} thn</span>
-                        </span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-2 px-3 text-[#94A3B8]">
-                    <LeagueBadge league={r.league_name} size={14} />
-                  </td>
-                  <td className="py-2 px-3">
-                    <TrendChip trend={r.actual_trend} fallback={r.actual_trajectory} />
-                  </td>
-                  <td className="py-2 px-3">
-                    <TrendChip
+        <div className="mt-4 max-h-[520px] overflow-y-auto">
+          <DataTable
+            columns={testTableColumns}
+            rows={filtered}
+            rowKey={(r) => r.player_id}
+            framed={true}
+            emptyMessage="Tidak ada data pemain yang cocok dengan filter."
+            ariaLabel={`Tabel ${preds.rows.length} data pemain uji`}
+            mobileCard={(r) => {
+              const isPositive = r.residual_eur > 0;
+              const isNegative = r.residual_eur < 0;
+              return (
+                <div className="rounded-control border border-border bg-surface p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <PlayerCell
+                      playerId={r.player_id}
+                      name={r.name}
+                      club={r.peak_club}
+                      meta={`${r.age} thn`}
+                      avatarSize={32}
+                      showClubLogo={true}
+                    />
+                    <LeagueBadge
+                      league={r.league_name}
+                      size={14}
+                      showName={false}
+                      className="shrink-0 text-muted"
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-rule text-xs">
+                    <span className="text-muted">Aktual:</span>
+                    <TrendBadge trend={r.actual_trend} fallback={r.actual_trajectory} />
+                    <span className="text-muted ml-1">Prediksi:</span>
+                    <TrendBadge
                       trend={r.pred_trend}
                       fallback={r.pred_trajectory_clean}
-                      wrong={!!r.pred_trend && r.pred_trend !== r.actual_trend}
+                      wrong={Boolean(r.pred_trend && r.pred_trend !== r.actual_trend)}
                     />
-                  </td>
-                  <td className="py-2 px-3 text-right font-semibold text-[#F1F5F9]">
-                    {fmt.eur(r.actual_value_eur)}
-                  </td>
-                  <td className="py-2 px-3 text-right text-[#94A3B8]">
-                    {r.forecast_value_eur !== undefined ? fmt.eur(r.forecast_value_eur) : "-"}
-                  </td>
-                  <td className="py-2 px-3 text-right text-[#94A3B8]">{fmt.eur(r.pred_value_eur)}</td>
-                  <td
-                    className={`py-2 pl-3 text-right font-bold ${
-                      r.residual_eur > 0
-                        ? "text-[#10B981]"
-                        : r.residual_eur < 0
-                          ? "text-[#EF4444]"
-                          : "text-[#94A3B8]"
-                    }`}
-                  >
-                    {r.residual_eur > 0 ? "+" : ""}
-                    {fmt.eur(r.residual_eur)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1.5 border-t border-rule">
+                    <div>
+                      <span className="text-muted block text-xs">Nilai Aktual</span>
+                      <span className="font-semibold text-ink tabular-nums">
+                        {fmt.eur(r.actual_value_eur)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted block text-xs">Forecast</span>
+                      <span className="text-ink tabular-nums">
+                        {r.forecast_value_eur !== undefined ? fmt.eur(r.forecast_value_eur) : "-"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted block text-xs">Nilai Wajar</span>
+                      <span className="text-ink tabular-nums">{fmt.eur(r.pred_value_eur)}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted block text-xs">Gap Wajar</span>
+                      <span
+                        className={cn(
+                          "font-semibold tabular-nums",
+                          isPositive
+                            ? "text-positive"
+                            : isNegative
+                              ? "text-negative"
+                              : "text-muted",
+                        )}
+                      >
+                        {isPositive ? "+" : ""}
+                        {fmt.eur(r.residual_eur)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            }}
+          />
         </div>
-      </div>
+      </Panel>
     </div>
   );
 }

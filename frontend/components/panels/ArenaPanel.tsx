@@ -2,6 +2,18 @@
 
 import type { OverviewResponse, TestPredictionsResponse } from "@/lib/api";
 import { fmt, TREND_META } from "@/lib/format";
+import {
+  PageHeader,
+  SectionHeader,
+  Panel,
+  PanelDividerGrid,
+  PanelDividerCell,
+  Stat,
+  DataTable,
+  type DataTableColumn,
+  Meter,
+  Disclosure,
+} from "@/components/ui";
 
 const MODEL_NAME: Record<string, { name: string; note: string }> = {
   "Ordinal HGB (calibrated)": { name: "Gradient boosting berurutan", note: "memperlakukan empat tren sebagai tangga, dari naik sampai jatuh" },
@@ -23,19 +35,10 @@ const outOf = (x: number, n: number) => `${Math.round(x * n)} dari ${n}`;
 
 /** Words for how much better the model is than the no-model guess. `gain` is a relative improvement. */
 function verdict(gain: number): { text: string; className: string } {
-  if (gain < 0) return { text: "Belum lebih baik", className: "text-[#FBBF24]" };
-  if (gain < 0.03) return { text: "Hampir setara", className: "text-[#CBD5E1]" };
-  if (gain < 0.15) return { text: "Sedikit lebih baik", className: "text-[#34D399]" };
-  return { text: "Jauh lebih baik", className: "text-[#34D399]" };
-}
-
-function Bar({ value, tone = "muted" }: { value: number; tone?: "accent" | "muted" | "warn" }) {
-  const color = { accent: "bg-[#10B981]", muted: "bg-[#64748B]", warn: "bg-[#F59E0B]" }[tone];
-  return (
-    <span className="block h-1.5 rounded-full bg-[#1B2634]">
-      <span className={`block h-1.5 rounded-full ${color}`} style={{ width: `${Math.min(100, value * 100)}%` }} />
-    </span>
-  );
+  if (gain < 0) return { text: "Belum lebih baik", className: "text-warning" };
+  if (gain < 0.03) return { text: "Hampir setara", className: "text-muted" };
+  if (gain < 0.15) return { text: "Sedikit lebih baik", className: "text-positive" };
+  return { text: "Jauh lebih baik", className: "text-positive" };
 }
 
 interface RaceRow {
@@ -67,44 +70,44 @@ function ModelRace({ rows, noise }: { rows: RaceRow[]; noise: number }) {
     <div className="mt-5">
       {rows.map((r) => (
         <div key={r.key} className={cols}>
-          <div className="py-2.5">
-            <p className={`text-[13px] leading-tight ${r.chosen ? "font-semibold text-[#F1F5F9]" : r.baseline ? "text-[#94A3B8]" : "text-[#CBD5E1]"}`}>
+          <div className="py-3">
+            <p className={`text-[13px] leading-tight ${r.chosen ? "font-semibold text-ink" : "text-muted"}`}>
               {r.name}
             </p>
-            {r.chosen ? <p className="text-xs text-[#34D399]">dipakai</p> : null}
+            {r.chosen ? <p className="text-xs text-positive">dipakai</p> : null}
           </div>
-          <div className="relative h-full min-h-11" title={r.note}>
+          <div className="relative h-full min-h-12" title={r.note}>
             {chosen && noise > 0 ? (
               <span
-                className="absolute inset-y-0 bg-[#10B981]/10"
+                className="absolute inset-y-0 bg-primary/10"
                 style={{ left: x(Math.max(lo, chosen.value - noise)), right: `calc(100% - ${x(Math.min(hi, chosen.value + noise))})` }}
               />
             ) : null}
-            {base ? <span className="absolute inset-y-0 w-px bg-[#F59E0B]/70" style={{ left: x(base.value) }} /> : null}
-            <span className="absolute left-0 right-0 top-1/2 h-px bg-[#243244]" />
+            {base ? <span className="absolute inset-y-0 w-px bg-warning/70" style={{ left: x(base.value) }} /> : null}
+            <span className="absolute left-0 right-0 top-1/2 h-px bg-border" />
             <span
               className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-transform ${
                 r.chosen
-                  ? "size-4 bg-[#10B981] ring-4 ring-[#10B981]/25"
+                  ? "size-4 bg-primary ring-4 ring-primary/25"
                   : r.baseline
-                    ? "size-3 border-2 border-[#F59E0B] bg-[#121A24]"
-                    : "size-3 bg-[#94A3B8]"
+                    ? "size-3 border-2 border-warning bg-surface"
+                    : "size-3 bg-muted"
               }`}
               style={{ left: x(r.value) }}
             />
           </div>
-          <p className={`text-right text-[13px] tabular-nums ${r.chosen ? "font-semibold text-[#F1F5F9]" : "text-[#CBD5E1]"}`}>
+          <p className={`text-right text-[13px] tabular-nums ${r.chosen ? "font-semibold text-ink" : "text-muted"}`}>
             {pct1(r.value)}
           </p>
         </div>
       ))}
       <div className={cols}>
         <span />
-        <div className="relative h-5 border-t border-[#243244]">
+        <div className="relative h-5 border-t border-border">
           {ticks.map((v, i) => (
             <span
               key={v}
-              className={`absolute top-1 -translate-x-1/2 text-[11px] tabular-nums text-[#7C8BA1] ${i % 2 ? "hidden sm:inline" : ""}`}
+              className={`absolute top-1 -translate-x-1/2 text-[11px] tabular-nums text-faint ${i % 2 ? "hidden sm:inline" : ""}`}
               style={{ left: x(v) }}
             >
               {Math.round(v * 100)}%
@@ -113,13 +116,13 @@ function ModelRace({ rows, noise }: { rows: RaceRow[]; noise: number }) {
         </div>
         <span />
       </div>
-      <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#94A3B8]">
+      <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted">
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-3 w-px bg-[#F59E0B]" />
+          <span className="h-3 w-px bg-warning" />
           garis yang harus dikalahkan: tanpa model
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-3 w-4 bg-[#10B981]/20" />
+          <span className="h-3 w-4 bg-primary/20" />
           selisih di dalam area ini masih kebetulan
         </span>
       </p>
@@ -130,21 +133,33 @@ function ModelRace({ rows, noise }: { rows: RaceRow[]; noise: number }) {
 /** 100 squares, one per 100 test players: filled = guessed right. */
 function Waffle({ value, tone, title, note }: { value: number; tone: "accent" | "warn"; title: string; note: string }) {
   const filled = Math.round(value * 100);
-  const on = tone === "accent" ? "bg-[#10B981]" : "bg-[#F59E0B]";
+  const on = tone === "accent" ? "bg-primary" : "bg-warning";
   return (
     <div>
       <div className="grid max-w-[168px] grid-cols-10 gap-[3px]" role="img" aria-label={`${filled} dari 100 pemain tertebak benar`}>
         {Array.from({ length: 100 }, (_, i) => (
-          <span key={i} className={`aspect-square rounded-[2px] ${i < filled ? on : "bg-[#1B2634]"}`} />
+          <span key={i} className={`aspect-square rounded-[2px] ${i < filled ? on : "bg-raised"}`} />
         ))}
       </div>
-      <p className={`mt-3 text-3xl font-semibold tabular-nums ${tone === "accent" ? "text-[#F1F5F9]" : "text-[#FBBF24]"}`}>
-        {filled} <span className="text-[13px] font-normal text-[#94A3B8]">dari 100</span>
+      <p className={`mt-3 text-2xl sm:text-[28px] font-semibold tabular-nums leading-none ${tone === "accent" ? "text-ink" : "text-warning"}`}>
+        {filled} <span className="text-[13px] font-normal text-muted">dari 100</span>
       </p>
-      <p className="text-[13px] font-semibold text-[#F1F5F9]">{title}</p>
-      <p className="text-xs leading-snug text-[#7C8BA1]">{note}</p>
+      <p className="mt-1.5 text-[13px] font-semibold text-ink">{title}</p>
+      <p className="mt-0.5 text-xs leading-snug text-muted">{note}</p>
     </div>
   );
+}
+
+interface MetricRow {
+  key: string;
+  task: string;
+  name: string;
+  isBest: boolean;
+  r2: string;
+  r2_log: string;
+  mae: string;
+  rmse: string;
+  medape: string;
 }
 
 export function ArenaPanel({
@@ -206,176 +221,216 @@ export function ArenaPanel({
   ];
   const maxToday = Math.max(...today.map((x) => x.n), 1);
 
-  const panel = "rounded-xl border border-[#243244] bg-[#121A24]";
+  const metricRows: MetricRow[] = tasks
+    ? Object.entries(tasks).flatMap(([task, block]) =>
+        block.models.map((m) => ({
+          key: `${task}-${m.name}`,
+          task: TASK_LABEL[task] ?? task,
+          name: m.name,
+          isBest: m.name === block.best_model,
+          r2: m.r2.toFixed(3),
+          r2_log: m.r2_log !== undefined && m.r2_log !== null ? m.r2_log.toFixed(3) : "-",
+          mae: fmt.eur(m.mae),
+          rmse: fmt.eur(m.rmse),
+          medape: m.medape !== undefined && m.medape !== null ? pct1(m.medape) : "-",
+        }))
+      )
+    : [];
+
+  const metricColumns: DataTableColumn<MetricRow>[] = [
+    {
+      key: "task",
+      header: "Tugas",
+      align: "left",
+      cell: (row) => <span className="text-muted">{row.task}</span>,
+    },
+    {
+      key: "name",
+      header: "Model",
+      align: "left",
+      cell: (row) => (
+        <span className={row.isBest ? "font-semibold text-ink" : "text-muted"}>
+          {row.name}
+          {row.isBest ? " (dipakai)" : ""}
+        </span>
+      ),
+    },
+    {
+      key: "r2",
+      header: "R² (€)",
+      align: "right",
+      cell: (row) => <span className="text-ink">{row.r2}</span>,
+    },
+    {
+      key: "r2_log",
+      header: "R² log",
+      align: "right",
+      cell: (row) => <span className="text-ink">{row.r2_log}</span>,
+    },
+    {
+      key: "mae",
+      header: "MAE",
+      align: "right",
+      cell: (row) => <span className="text-muted">{row.mae}</span>,
+    },
+    {
+      key: "rmse",
+      header: "RMSE",
+      align: "right",
+      cell: (row) => <span className="text-muted">{row.rmse}</span>,
+    },
+    {
+      key: "medape",
+      header: "Median APE",
+      align: "right",
+      cell: (row) => <span className="text-muted">{row.medape}</span>,
+    },
+  ];
 
   return (
-    <div className="space-y-5">
-      <div className="max-w-3xl">
-        <h2 className="text-2xl font-semibold tracking-tight text-[#F1F5F9]">Seberapa bagus modelnya</h2>
-        <p className="mt-1.5 text-sm leading-relaxed text-[#CBD5E1]">
-          Model di situs ini menebak tiga hal tentang nilai pasar pemain. Tiap tebakan diuji pada {fmt.int(ds.test_size)} pemain
-          yang tidak pernah dilihat model, lalu dibandingkan dengan tebakan paling sederhana: menganggap tidak ada yang berubah.
-          Model baru berguna kalau mengalahkan tebakan sederhana itu.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Seberapa bagus modelnya"
+        subtitle={`Model di situs ini menebak tiga hal tentang nilai pasar pemain. Tiap tebakan diuji pada ${fmt.int(ds.test_size)} pemain yang tidak pernah dilihat model, lalu dibandingkan dengan tebakan paling sederhana: menganggap tidak ada yang berubah. Model baru berguna kalau mengalahkan tebakan sederhana itu.`}
+      />
 
-      <section className={panel}>
-        <div className="grid divide-y divide-[#243244] lg:grid-cols-3 lg:divide-x lg:divide-y-0">
+      <Panel padding="none">
+        <PanelDividerGrid cols={3}>
           {cards.map((c) => (
-            <div key={c.title} className="p-5">
-              <h3 className="text-base font-semibold text-[#F1F5F9]">{c.title}</h3>
-              <p className="mt-1 text-[13px] leading-relaxed text-[#94A3B8]">{c.question}</p>
-              <p className="mt-4 text-3xl font-semibold tabular-nums text-[#F1F5F9]">{c.figure}</p>
-              <p className="text-[13px] text-[#CBD5E1]">{c.unit}</p>
-              <p className="mt-3 border-t border-[#1B2634] pt-3 text-[13px] text-[#94A3B8]">
-                {c.base}. <span className={`font-semibold ${c.v.className}`}>{c.v.text}.</span>
-              </p>
-            </div>
+            <PanelDividerCell key={c.title}>
+              <Stat
+                label={c.title}
+                value={c.figure}
+                unit={c.unit}
+                description={c.question}
+                comparison={
+                  <span>
+                    {c.base}. <span className={`font-semibold ${c.v.className}`}>{c.v.text}.</span>
+                  </span>
+                }
+              />
+            </PanelDividerCell>
           ))}
-        </div>
-        <p className="border-t border-[#243244] px-5 py-3 text-[13px] leading-relaxed text-[#CBD5E1]">
-          <span className="font-semibold text-[#F1F5F9]">Kesimpulan.</span> Model paling berguna untuk melihat setahun ke depan.
+        </PanelDividerGrid>
+        <div className="border-t border-rule bg-raised/50 px-4 py-3 sm:px-5 text-[13px] text-muted leading-relaxed">
+          <span className="font-semibold text-ink">Kesimpulan.</span> Model paling berguna untuk melihat setahun ke depan.
           Untuk satu update ke depan, harga pemain jarang berubah banyak, jadi hasil model hampir sama dengan menganggap
           semuanya tetap.
-        </p>
-      </section>
+        </div>
+      </Panel>
 
-      <div className="grid items-start gap-5 lg:grid-cols-2">
-        <section className={`${panel} p-5`}>
-          <h3 className="text-base font-semibold text-[#F1F5F9]">Empat jenis model yang dicoba</h3>
-          <p className="mt-1 text-[13px] leading-relaxed text-[#CBD5E1]">
-            Seberapa sering tiap model benar menebak tren. Sumbunya diperbesar supaya bedanya terlihat: selisih antar model
-            hanya {(spread * 100).toFixed(1).replace(".", ",")} poin, masih di dalam area kebetulan.
-          </p>
-          <ModelRace
-            rows={candidates.map((m) => ({
-              key: m.name,
-              name: (MODEL_NAME[m.name] ?? { name: m.name }).name,
-              note: (MODEL_NAME[m.name] ?? { note: "" }).note,
-              value: m.accuracy,
-              chosen: m.name === trend?.best_model,
-              baseline: m.name.startsWith("Persistence"),
-            }))}
-            noise={trend?.validation.group_kfold[trend.best_model]?.accuracy_std ?? 0}
-          />
-          <p className="mt-4 text-xs leading-relaxed text-[#7C8BA1]">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+        <Panel className="h-full flex flex-col">
+          <div>
+            <SectionHeader
+              title="Empat jenis model yang dicoba"
+              subtitle={`Seberapa sering tiap model benar menebak tren. Sumbunya diperbesar supaya bedanya terlihat: selisih antar model hanya ${(spread * 100).toFixed(1).replace(".", ",")} poin, masih di dalam area kebetulan.`}
+            />
+            <ModelRace
+              rows={candidates.map((m) => ({
+                key: m.name,
+                name: (MODEL_NAME[m.name] ?? { name: m.name }).name,
+                note: (MODEL_NAME[m.name] ?? { note: "" }).note,
+                value: m.accuracy,
+                chosen: m.name === trend?.best_model,
+                baseline: m.name.startsWith("Persistence"),
+              }))}
+              noise={trend?.validation.group_kfold[trend.best_model]?.accuracy_std ?? 0}
+            />
+          </div>
+          <p className="mt-4 text-[13px] leading-relaxed text-muted">
             Model yang dipakai dipilih karena peluang yang diberikannya paling bisa dipercaya, bukan karena akurasinya paling
             tinggi. Pemilihan dilakukan sebelum melihat data uji.
           </p>
-        </section>
+        </Panel>
 
-        <section className={`${panel} p-5`}>
-          <h3 className="text-base font-semibold text-[#F1F5F9]">Kenapa tidak ada angka 100% di sini</h3>
-          <p className="mt-1 text-[13px] leading-relaxed text-[#CBD5E1]">
-            Model bisa tampak sempurna kalau diberi kolom data yang diam-diam berisi jawabannya. Itu disebut bocor. Angka seperti
-            itu runtuh begitu dipakai untuk pemain sungguhan, karena jawabannya belum ada.
-          </p>
-          <div className="mt-5 grid grid-cols-2 gap-5">
-            <Waffle
-              value={cleanBest.accuracy}
-              tone="accent"
-              title="Model jujur"
-              note="hanya melihat riwayat harga sebelum tebakan"
+        <Panel className="h-full flex flex-col">
+          <div>
+            <SectionHeader
+              title="Kenapa tidak ada angka 100% di sini"
+              subtitle="Model bisa tampak sempurna kalau diberi kolom data yang diam-diam berisi jawabannya. Itu disebut bocor. Angka seperti itu runtuh begitu dipakai untuk pemain sungguhan, karena jawabannya belum ada."
             />
-            <Waffle
-              value={leakBest.accuracy}
-              tone="warn"
-              title="Model yang diberi bocoran"
-              note="tampak sempurna, tapi tidak bisa dipakai"
-            />
+            <div className="mt-5 grid grid-cols-2 gap-5">
+              <Waffle
+                value={cleanBest.accuracy}
+                tone="accent"
+                title="Model jujur"
+                note="hanya melihat riwayat harga sebelum tebakan"
+              />
+              <Waffle
+                value={leakBest.accuracy}
+                tone="warn"
+                title="Model yang diberi bocoran"
+                note="tampak sempurna, tapi tidak bisa dipakai"
+              />
+            </div>
           </div>
-          <p className="mt-4 text-xs leading-relaxed text-[#7C8BA1]">
+          <p className="mt-4 text-[13px] leading-relaxed text-muted">
             Tiap kotak satu dari 100 pemain uji; kotak berwarna berarti trennya tertebak benar (lima kelas asli dataset).
             Selisih {(preds.error_analysis.leakage_delta_acc * 100).toFixed(1).replace(".", ",")} poin itu murni dari bocoran.
             Semua angka di situs ini memakai model jujur. Rinciannya ada di tab Penjelasan &amp; Workflow.
           </p>
-        </section>
+        </Panel>
       </div>
 
-      <section className={panel}>
-        <h3 className="px-5 pt-4 text-base font-semibold text-[#F1F5F9]">Data di balik angka ini</h3>
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-4 p-5">
+      <Panel>
+        <SectionHeader title="Data di balik angka ini" />
+        <div className="mt-5 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-6 lg:gap-8 items-start">
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
             {[
-              [fmt.int(ds.total_players), "pemain dari lima liga top Eropa"],
-              [fmt.int(ds.history_rows), "catatan nilai pasar sejak 2004"],
-              [fmt.int(ds.train_size), "pemain untuk melatih model"],
-              [fmt.int(ds.test_size), "pemain disisihkan untuk menguji"],
-            ].map(([figure, label]) => (
-              <div key={label}>
-                <dt className="text-2xl font-semibold tabular-nums text-[#F1F5F9]">{figure}</dt>
-                <dd className="text-[13px] leading-snug text-[#94A3B8]">{label}</dd>
+              { value: fmt.int(ds.total_players), label: "pemain dari lima liga top Eropa" },
+              { value: fmt.int(ds.history_rows), label: "catatan nilai pasar sejak 2004" },
+              { value: fmt.int(ds.train_size), label: "pemain untuk melatih model" },
+              { value: fmt.int(ds.test_size), label: "pemain disisihkan untuk menguji" },
+            ].map(({ value, label }) => (
+              <div key={label} className="flex flex-col">
+                <dt className="text-2xl sm:text-[26px] font-semibold tabular-nums text-ink leading-tight">
+                  {value}
+                </dt>
+                <dd className="mt-1 text-[13px] leading-snug text-muted">
+                  {label}
+                </dd>
               </div>
             ))}
           </dl>
-          <div className="border-t border-[#243244] p-5 lg:border-l lg:border-t-0">
-            <p className="text-[13px] text-[#CBD5E1]">Tren {fmt.int(ds.total_players)} pemain saat ini</p>
-            <ul className="mt-3 space-y-2.5">
-              {today.map((x) => (
-                <li key={x.id} className="text-[13px]">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-[#F1F5F9]">
-                      {TREND_META[x.id].label} <span className="text-xs text-[#7C8BA1]">{TREND_META[x.id].hint}</span>
-                    </span>
-                    <span className="tabular-nums text-[#94A3B8]">
-                      {fmt.int(x.n)} ({pct0(x.n / ds.total_players)})
-                    </span>
-                  </div>
-                  <span className="mt-1.5 block">
-                    <Bar value={x.n / maxToday} />
-                  </span>
-                </li>
-              ))}
-            </ul>
+          <div className="border-t border-rule pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
+            <p className="text-[13px] font-medium text-ink mb-3.5">
+              Tren {fmt.int(ds.total_players)} pemain saat ini
+            </p>
+            <div className="space-y-3">
+              {today.map((x) => {
+                const meta = TREND_META[x.id];
+                return (
+                  <Meter
+                    key={x.id}
+                    value={x.n}
+                    max={maxToday}
+                    label={meta.label}
+                    sublabel={meta.hint}
+                    valueText={`${fmt.int(x.n)} (${pct0(x.n / ds.total_players)})`}
+                    tone="mint"
+                    height="sm"
+                  />
+                );
+              })}
+            </div>
           </div>
         </div>
-      </section>
+      </Panel>
 
       {tasks ? (
-        <details className={`${panel} group`}>
-          <summary className="cursor-pointer list-none px-5 py-4 text-base font-semibold text-[#F1F5F9] marker:hidden">
-            Rincian teknis: metrik tiap model harga
-            <span className="ml-2 text-[13px] font-normal text-[#7C8BA1] group-open:hidden">buka</span>
-            <span className="ml-2 hidden text-[13px] font-normal text-[#7C8BA1] group-open:inline">tutup</span>
-          </summary>
-          <div className="overflow-x-auto border-t border-[#243244] px-5 py-4">
-            <table className="w-full min-w-[620px] text-[13px]">
-              <thead>
-                <tr className="text-xs text-[#7C8BA1]">
-                  <th className="pb-2 text-left font-normal">Tugas</th>
-                  <th className="pb-2 text-left font-normal">Model</th>
-                  <th className="pb-2 text-right font-normal">R² (€)</th>
-                  <th className="pb-2 text-right font-normal">R² log</th>
-                  <th className="pb-2 text-right font-normal">MAE</th>
-                  <th className="pb-2 text-right font-normal">RMSE</th>
-                  <th className="pb-2 text-right font-normal">Median APE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(tasks).flatMap(([task, block]) =>
-                  block.models.map((m) => (
-                    <tr key={`${task}-${m.name}`} className="border-t border-[#1B2634]">
-                      <td className="py-2 text-[#94A3B8]">{TASK_LABEL[task] ?? task}</td>
-                      <td className={`py-2 ${m.name === block.best_model ? "font-semibold text-[#F1F5F9]" : "text-[#CBD5E1]"}`}>
-                        {m.name}
-                        {m.name === block.best_model ? " (dipakai)" : ""}
-                      </td>
-                      <td className="py-2 text-right tabular-nums text-[#F1F5F9]">{m.r2.toFixed(3)}</td>
-                      <td className="py-2 text-right tabular-nums text-[#F1F5F9]">{m.r2_log?.toFixed(3) ?? "-"}</td>
-                      <td className="py-2 text-right tabular-nums text-[#CBD5E1]">{fmt.eur(m.mae)}</td>
-                      <td className="py-2 text-right tabular-nums text-[#CBD5E1]">{fmt.eur(m.rmse)}</td>
-                      <td className="py-2 text-right tabular-nums text-[#CBD5E1]">{m.medape !== undefined ? pct1(m.medape) : "-"}</td>
-                    </tr>
-                  )),
-                )}
-              </tbody>
-            </table>
-            <p className="mt-3 text-xs leading-relaxed text-[#7C8BA1]">
-              R² mendekati 1 berarti tebakan mengikuti harga asli. MAE dan RMSE adalah rata-rata selisih dalam Euro. Median APE
-              adalah selisih tengah dalam persen. &quot;Naive&quot; adalah tebakan tanpa model.
-            </p>
-          </div>
-        </details>
+        <Disclosure title="Rincian teknis: metrik tiap model harga" summary="buka">
+          <DataTable
+            columns={metricColumns}
+            rows={metricRows}
+            rowKey={(r) => r.key}
+            ariaLabel="Rincian teknis metrik tiap model harga"
+          />
+          <p className="mt-3 text-xs leading-relaxed text-muted">
+            R² mendekati 1 berarti tebakan mengikuti harga asli. MAE dan RMSE adalah rata-rata selisih dalam Euro. Median APE
+            adalah selisih tengah dalam persen. &quot;Naive&quot; adalah tebakan tanpa model.
+          </p>
+        </Disclosure>
       ) : null}
     </div>
   );

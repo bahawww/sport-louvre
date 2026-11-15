@@ -5,12 +5,23 @@ import { useEffect, useRef, useState } from "react";
 
 import { PlayerAvatar } from "@/components/entity-media";
 import {
+  DataTable,
+  type DataTableColumn,
+  Meter,
+  PageHeader,
+  Panel,
+  SectionHeader,
+  Segmented,
+  type SegmentedOption,
+} from "@/components/ui";
+import {
   fetchApi,
   type FeatureImportanceItem,
   type OverviewResponse,
   type SimulateResponse,
 } from "@/lib/api";
 import { fmt, TREND_META } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 import { WorkflowRoadmap } from "./WorkflowRoadmap";
 
@@ -19,11 +30,11 @@ const EXAMPLE_PLAYER_ID = "148455"; // Mohamed Salah: a full career arc, 41 valu
 
 type ModelId = "forecast" | "trend" | "outlook" | "fundamental";
 
-const MODELS: { id: ModelId; label: string }[] = [
-  { id: "forecast", label: "Harga berikutnya" },
-  { id: "trend", label: "Tren" },
-  { id: "outlook", label: "12 bulan ke depan" },
-  { id: "fundamental", label: "Nilai wajar" },
+const MODELS: readonly SegmentedOption<ModelId>[] = [
+  { value: "forecast", label: "Harga berikutnya" },
+  { value: "trend", label: "Tren" },
+  { value: "outlook", label: "12 bulan ke depan" },
+  { value: "fundamental", label: "Nilai wajar" },
 ];
 
 const FEATURE_LABEL: Record<string, string> = {
@@ -129,24 +140,23 @@ function HistoryChart({ sim, model }: { sim: SimulateResponse; model: ModelId })
   const labelLeft = x(target.t) > width - 130;
 
   return (
-    <div ref={ref}>
+    <div ref={ref} className="w-full overflow-hidden">
       <svg
-        width={width}
-        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        className="block w-full h-auto"
         role="img"
         aria-label={`Riwayat nilai pasar ${p.name} dan tebakan model`}
-        className="block"
       >
         {ticks.map((v) => (
           <g key={v}>
-            <line x1={pad.l} x2={width - pad.r} y1={y(v)} y2={y(v)} stroke="#1B2634" strokeWidth="1" />
-            <text x={pad.l - 8} y={y(v) + 4} textAnchor="end" fontSize="11" fill="#7C8BA1">
+            <line x1={pad.l} x2={width - pad.r} y1={y(v)} y2={y(v)} stroke="var(--grid)" strokeWidth="1" />
+            <text x={pad.l - 8} y={y(v) + 4} textAnchor="end" fontSize="11" fill="var(--muted)">
               {v === 0 ? "0" : `€${v / 1e6}M`}
             </text>
           </g>
         ))}
         {years.map((yr) => (
-          <text key={yr} x={x(Date.UTC(yr, 0, 1))} y={height - 8} textAnchor="middle" fontSize="11" fill="#7C8BA1">
+          <text key={yr} x={x(Date.UTC(yr, 0, 1))} y={height - 8} textAnchor="middle" fontSize="11" fill="var(--muted)">
             {yr}
           </text>
         ))}
@@ -162,10 +172,10 @@ function HistoryChart({ sim, model }: { sim: SimulateResponse; model: ModelId })
                 y={top}
                 width={width - pad.r - pad.l}
                 height={bottom - top}
-                fill={i % 2 === 0 ? "#162130" : "#0F1721"}
+                fill={i % 2 === 0 ? "var(--raised)" : "var(--surface)"}
               />
               {bottom - top >= 13 ? (
-                <text x={pad.l + 8} y={Math.min(bottom - 5, top + 15)} fontSize="11" fill="#CBD5E1">
+                <text x={pad.l + 8} y={Math.min(bottom - 5, top + 15)} fontSize="11" fill="var(--text)">
                   {width < 520 ? TREND_META[b.id].label.split(" / ")[0] : TREND_META[b.id].label} {pct0(prob)}
                 </text>
               ) : null}
@@ -180,28 +190,36 @@ function HistoryChart({ sim, model }: { sim: SimulateResponse; model: ModelId })
               y={pad.t}
               width={x(last.t) - x(anchorCut)}
               height={height - pad.t - pad.b}
-              fill="#111923"
+              fill="var(--raised)"
             />
-            <path d={path(hidden)} fill="none" stroke="#56657A" strokeWidth="1.5" strokeDasharray="3 4" />
-            <text x={x(last.t) - 6} y={height - pad.b - 8} textAnchor="end" fontSize="11" fill="#94A3B8">
+            <path d={path(hidden)} fill="none" stroke="var(--muted)" strokeWidth="1.5" strokeDasharray="3 4" />
+            <text x={x(last.t) - 6} y={height - pad.b - 8} textAnchor="end" fontSize="11" fill="var(--muted)">
               12 bulan terakhir disembunyikan
             </text>
           </>
         ) : null}
 
-        <path d={path(seen)} fill="none" stroke="#E2E8F0" strokeWidth="2" strokeLinejoin="round" />
+        <path d={path(seen)} fill="none" stroke="var(--text)" strokeWidth="2" strokeLinejoin="round" />
         <line
           x1={x(from.t)}
           y1={y(from.v)}
           x2={x(target.t)}
           y2={y(target.v)}
-          stroke="#10B981"
+          stroke="var(--chart-1)"
           strokeWidth="1.5"
           strokeDasharray="4 4"
         />
-        <line x1={x(target.t)} x2={x(target.t)} y1={y(target.hi)} y2={y(target.lo)} stroke="#10B981" strokeWidth="6" strokeOpacity="0.28" />
-        <circle cx={x(target.t)} cy={y(target.v)} r="5" fill="#10B981" />
-        <circle cx={x(last.t)} cy={y(last.v)} r="3.5" fill="#E2E8F0" />
+        <line
+          x1={x(target.t)}
+          x2={x(target.t)}
+          y1={y(target.hi)}
+          y2={y(target.lo)}
+          stroke="var(--chart-1)"
+          strokeWidth="6"
+          strokeOpacity="0.28"
+        />
+        <circle cx={x(target.t)} cy={y(target.v)} r="5" fill="var(--chart-1)" />
+        <circle cx={x(last.t)} cy={y(last.v)} r="3.5" fill="var(--text)" />
 
         <text
           x={labelLeft ? x(target.t) + 4 : x(target.t) + 10}
@@ -209,7 +227,7 @@ function HistoryChart({ sim, model }: { sim: SimulateResponse; model: ModelId })
           textAnchor={labelLeft ? "end" : "start"}
           fontSize="12"
           fontWeight="600"
-          fill="#10B981"
+          fill="var(--chart-1)"
         >
           {fmt.eurShort(target.v)}
         </text>
@@ -223,29 +241,57 @@ function BarList({ items }: { items: FeatureImportanceItem[] }) {
   const max = top[0]?.importance ?? 1;
   if (top.length === 1) {
     return (
-      <p className="mt-1 text-[13px] leading-relaxed text-[#CBD5E1]">
+      <p className="mt-2 text-[13px] leading-relaxed text-muted">
         {FEATURE_LABEL[top[0].feature] ?? top[0].feature}, {pct0(top[0].importance)}. Fitur lain masing-masing di bawah 1%.
       </p>
     );
   }
   return (
-    <ul className="mt-2 space-y-1.5">
+    <div className="mt-3 space-y-2.5">
       {top.map((i) => (
-        <li key={i.feature} className="grid grid-cols-[1fr_auto] items-center gap-x-3 text-[13px]">
-          <span className="truncate text-[#CBD5E1]">{FEATURE_LABEL[i.feature] ?? i.feature}</span>
-          <span className="text-right tabular-nums text-[#94A3B8]">{pct0(i.importance)}</span>
-          <span className="col-span-2 h-1 rounded-full bg-[#1B2634]">
-            <span className="block h-1 rounded-full bg-[#64748B]" style={{ width: `${(i.importance / max) * 100}%` }} />
-          </span>
-        </li>
+        <Meter
+          key={i.feature}
+          label={FEATURE_LABEL[i.feature] ?? i.feature}
+          value={i.importance}
+          max={max}
+          valueText={pct0(i.importance)}
+          tone="neutral"
+          height="sm"
+        />
       ))}
-    </ul>
+    </div>
   );
 }
 
 function Verdict({ good, children }: { good: boolean; children: React.ReactNode }) {
-  return <span className={good ? "text-[#34D399]" : "text-[#FBBF24]"}>{children}</span>;
+  return <span className={good ? "text-positive font-medium" : "text-warning font-medium"}>{children}</span>;
 }
+
+interface LeakRow {
+  name: string;
+  note: string;
+  value: number;
+  bad: boolean;
+}
+
+interface ScoreRow {
+  name: string;
+  unit: string;
+  model: string;
+  base: string;
+  good: boolean;
+}
+
+const GLOSSARY_ITEMS: [string, string][] = [
+  ["Update harga", "Satu kali Transfermarkt merevisi nilai pasar pemain. Rata-rata tiap lima bulan."],
+  ["Tren 4 kelas", "Posisi harga terhadap puncak karier: dekat puncak, 20 sampai 30% di bawah, 30 sampai 60% di bawah, atau lebih."],
+  ["Tebakan tanpa model", "Menganggap harga atau kelasnya sama seperti terakhir. Pembanding wajib untuk setiap angka."],
+  ["Bocor (leakage)", "Fitur yang diam-diam memuat jawaban. Akurasi tampak tinggi tapi tidak berlaku untuk masa depan."],
+  ["Rentang 80%", "Batas bawah dan atas tebakan. Dikalibrasi supaya 8 dari 10 harga asli jatuh di dalamnya."],
+  ["Uji ke masa depan", "Model dilatih hanya dari data sebelum satu tanggal, lalu diuji pada update sesudahnya."],
+  ["Skala log", "Mengukur selisih dalam persen, bukan Euro, supaya pemain murah dan mahal dinilai setara."],
+  ["Sinyal beli / risiko", "Hanya muncul kalau peluang naik atau turun lebih dari 5% dalam setahun minimal 70%."],
+];
 
 export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
   const [model, setModel] = useState<ModelId>("forecast");
@@ -446,7 +492,7 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
 
   const prev = leak?.previous_pipeline?.reported_clean_classifier.accuracy;
   const prevSim = leak?.previous_pipeline?.simulate_endpoint_classifier.accuracy;
-  const leakRows = leak
+  const leakRows: LeakRow[] = leak
     ? [
         ...(prev ? [{ name: "Pipeline lama", note: "memakai kolom ringkasan CSV", value: prev, bad: true }] : []),
         ...(prevSim
@@ -467,7 +513,39 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
       ]
     : [];
 
-  const scoreRows = [
+  const leakColumns: DataTableColumn<LeakRow>[] = [
+    {
+      key: "name",
+      header: "Akurasi 5 kelas",
+      align: "left",
+      cell: (r) => (
+        <div className="py-1">
+          <span className="font-medium text-ink">{r.name}</span>
+          <span className="block text-xs text-muted">{r.note}</span>
+          <Meter
+            value={r.value * 100}
+            max={100}
+            tone={r.bad ? "amber" : "mint"}
+            height="sm"
+            className="mt-1.5"
+          />
+        </div>
+      ),
+    },
+    {
+      key: "value",
+      header: "Benar",
+      align: "right",
+      className: "align-top",
+      cell: (r) => (
+        <span className={cn("font-medium", r.bad ? "text-warning" : "text-ink")}>
+          {pct1(r.value)}
+        </span>
+      ),
+    },
+  ];
+
+  const scoreRows: ScoreRow[] = [
     trend && {
       name: "Tren, 4 kelas",
       unit: "benar",
@@ -510,252 +588,246 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
       base: pct0(ov.base_rate.down),
       good: true,
     },
-  ].filter(Boolean) as { name: string; unit: string; model: string; base: string; good: boolean }[];
+  ].filter(Boolean) as ScoreRow[];
 
-  const panel = "rounded-xl border border-[#243244] bg-[#121A24]";
+  const scoreColumns: DataTableColumn<ScoreRow>[] = [
+    {
+      key: "name",
+      header: "Tugas",
+      align: "left",
+      cell: (r) => (
+        <div className="py-0.5">
+          <span className="font-medium text-ink">{r.name}</span>
+          <span className="block text-xs text-muted">{r.unit}</span>
+        </div>
+      ),
+    },
+    {
+      key: "model",
+      header: "Model",
+      align: "right",
+      className: "align-top",
+      cell: (r) => (
+        <span className={cn("font-medium", r.good ? "text-positive" : "text-warning")}>
+          {r.model}
+        </span>
+      ),
+    },
+    {
+      key: "base",
+      header: "Tanpa model",
+      align: "right",
+      className: "align-top text-muted",
+      cell: (r) => <span className="text-muted">{r.base}</span>,
+    },
+  ];
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-        <div className="max-w-3xl">
-          <h2 className="text-2xl font-semibold tracking-tight text-[#F1F5F9]">Cara kerja model</h2>
-          <p className="mt-1.5 text-sm leading-relaxed text-[#CBD5E1]">
-            Semua model di situs ini belajar dari satu hal: riwayat nilai pasar pemain. Tidak ada data gol, menit bermain,
-            cedera, atau kontrak. Di bawah ini satu riwayat asli, dan apa yang ditebak tiap model darinya.
-          </p>
-        </div>
-        {mc && card ? (
-          <p className="text-xs text-[#7C8BA1]">
-            Data sampai {dateId(card.data_as_of)} · dilatih {dateId(mc.trained_at)} · versi {mc.version.slice(0, 7)}
-          </p>
-        ) : null}
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Cara membaca angka di situs ini"
+        subtitle="Semua model di situs ini belajar dari satu hal: riwayat nilai pasar pemain. Tidak ada data gol, menit bermain, cedera, atau kontrak. Di bawah ini satu riwayat asli, dan apa yang ditebak tiap model darinya."
+        actions={
+          mc && card ? (
+            <p className="text-xs text-muted">
+              Data sampai {dateId(card.data_as_of)} · dilatih {dateId(mc.trained_at)} · versi {mc.version.slice(0, 7)}
+            </p>
+          ) : null
+        }
+      />
 
-      <section className={`${panel} overflow-hidden`}>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#243244] px-5 py-3">
-          <div role="tablist" aria-label="Pilih model" className="inline-flex flex-wrap gap-1 rounded-lg bg-[#0B1117] p-1">
-            {MODELS.map((m) => (
-              <button
-                key={m.id}
-                role="tab"
-                type="button"
-                aria-selected={model === m.id}
-                onClick={() => setModel(m.id)}
-                className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition ${
-                  model === m.id ? "bg-[#243244] text-[#F1F5F9]" : "text-[#94A3B8] hover:text-[#F1F5F9]"
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-          <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#94A3B8]">
+      <Panel as="section" padding="none" className="overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4 sm:px-5">
+          <Segmented
+            options={MODELS}
+            value={model}
+            onChange={setModel}
+            ariaLabel="Pilih model"
+            size="sm"
+          />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-0.5 w-4 bg-[#E2E8F0]" />
+              <span className="h-0.5 w-4 bg-ink" />
               Dilihat model
             </span>
             {model === "fundamental" ? (
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-0 w-4 border-t border-dashed border-[#7C8BA1]" />
+                <span className="h-0 w-4 border-t border-dashed border-muted" />
                 Disembunyikan
               </span>
             ) : null}
             <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-[#10B981]" />
+              <span className="size-2 rounded-full bg-primary" />
               Ditebak, dengan rentang 80%
             </span>
-          </p>
+          </div>
         </div>
 
-        <div className="grid lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
-          <div className="min-w-0 p-5">
+        <div className="grid lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)] divide-y lg:divide-y-0 lg:divide-x divide-border">
+          <div className="min-w-0 p-4 sm:p-5">
             {p ? (
-              <div className="mb-3 flex items-center gap-3">
+              <div className="mb-4 flex items-center gap-3">
                 <PlayerAvatar playerId={p.player_id} name={p.name} size={48} />
-                <p className="text-[13px] leading-relaxed text-[#94A3B8]">
-                  <span className="block text-base font-semibold text-[#F1F5F9]">{p.name}</span>
-                  {p.position}, {p.age} tahun. Nilai sekarang{" "}
-                  <span className="font-semibold text-[#F1F5F9]">{fmt.eur(p.last_value_eur)}</span>, puncak{" "}
-                  {fmt.eur(p.peak_value_eur)}. {p.history.length} valuasi sejak {p.history[0].date.slice(0, 4)}.
-                </p>
+                <div className="text-[13px] leading-relaxed text-muted">
+                  <span className="block text-base font-semibold text-ink">{p.name}</span>
+                  <span>
+                    {p.position}, {p.age} tahun. Nilai sekarang{" "}
+                    <span className="font-semibold text-ink">{fmt.eur(p.last_value_eur)}</span>, puncak{" "}
+                    {fmt.eur(p.peak_value_eur)}. {p.history.length} valuasi sejak {p.history[0].date.slice(0, 4)}.
+                  </span>
+                </div>
               </div>
             ) : null}
             {sim?.player ? (
               <HistoryChart sim={sim} model={model} />
             ) : (
-              <p className="py-24 text-center text-[13px] text-[#94A3B8]">
+              <div className="py-24 text-center text-xs text-muted">
                 {example.isError ? "Contoh pemain gagal dimuat." : "Memuat riwayat harga..."}
-              </p>
+              </div>
             )}
           </div>
 
-          <div className="border-t border-[#243244] p-5 lg:border-l lg:border-t-0">
-            <h3 className="text-base font-semibold leading-snug text-[#F1F5F9]">{d.question}</h3>
+          <div className="p-4 sm:p-5 bg-surface">
+            <h3 className="text-base font-semibold leading-snug text-ink">{d.question}</h3>
             <dl className="mt-4 space-y-3 text-[13px] leading-relaxed">
               <div>
-                <dt className="text-[#7C8BA1]">Yang dilihat</dt>
-                <dd className="text-[#CBD5E1]">{d.sees}</dd>
+                <dt className="text-xs font-medium text-muted">Yang dilihat</dt>
+                <dd className="mt-0.5 text-ink">{d.sees}</dd>
               </div>
               <div>
-                <dt className="text-[#7C8BA1]">Yang ditebak</dt>
-                <dd className="text-[#CBD5E1]">{d.guesses}</dd>
+                <dt className="text-xs font-medium text-muted">Yang ditebak</dt>
+                <dd className="mt-0.5 text-ink">{d.guesses}</dd>
               </div>
               <div>
-                <dt className="text-[#7C8BA1]">Untuk pemain ini</dt>
-                <dd className="text-[#F1F5F9]">{d.result ?? "-"}</dd>
+                <dt className="text-xs font-medium text-muted">Untuk pemain ini</dt>
+                <dd className="mt-0.5 font-medium text-ink">{d.result ?? "-"}</dd>
               </div>
               <div>
-                <dt className="text-[#7C8BA1]">Hasil uji</dt>
-                <dd className="text-[#CBD5E1]">{d.tested ?? "-"}</dd>
+                <dt className="text-xs font-medium text-muted">Hasil uji</dt>
+                <dd className="mt-0.5 text-ink">{d.tested ?? "-"}</dd>
               </div>
             </dl>
-            <h4 className="mt-5 text-[13px] text-[#7C8BA1]">Paling menentukan tebakan</h4>
-            <BarList items={d.features} />
+            <div className="mt-5 border-t border-rule pt-4">
+              <h4 className="text-xs font-medium text-muted">Paling menentukan tebakan</h4>
+              <BarList items={d.features} />
+            </div>
           </div>
         </div>
-      </section>
+      </Panel>
 
-      <section className={panel}>
-        <div className="px-5 pt-4">
-          <h3 className="text-base font-semibold text-[#F1F5F9]">Alur kerja dari CSV sampai model</h3>
-          <p className="mt-1 text-[13px] text-[#94A3B8]">
-            Sepuluh tahap yang dijalankan tiap kali model dilatih. Pilih satu tahap untuk melihat apa yang terjadi pada data.
-          </p>
+      <Panel as="section" padding="none" className="overflow-hidden">
+        <div className="p-4 sm:p-5 pb-0 sm:pb-0">
+          <SectionHeader
+            as="h2"
+            title="Alur kerja dari CSV sampai model"
+            subtitle="Sepuluh tahap yang dijalankan tiap kali model dilatih. Pilih satu tahap untuk melihat apa yang terjadi pada data."
+          />
         </div>
-        <WorkflowRoadmap steps={workflow} overview={overview} sim={sim} />
-      </section>
+        <WorkflowRoadmap steps={workflow} overview={overview} sim={example.data} />
+      </Panel>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <section className={`${panel} p-5`}>
-          <h3 className="text-base font-semibold text-[#F1F5F9]">Kenapa akurasi lama 85% tidak dipakai</h3>
-          <p className="mt-2 text-[13px] leading-relaxed text-[#CBD5E1]">
-            Kolom ringkasan di CSV seperti <code className="text-[#F1F5F9]">peak_value_eur</code> dihitung dari seluruh riwayat,
-            termasuk harga yang sedang ditebak.
-            {leak
-              ? ` Pada ${pct1(leak.share_players_target_exposed)} pemain, kolom itu adalah jawabannya sendiri, dan aturan "nilai puncak naik" menebak kelas rising_star dengan tepat ${pct0(leak.rule_accuracy)}.`
-              : ""}{" "}
-            Model sekarang hanya menghitung fitur dari riwayat sebelum harga target.
-          </p>
-          <table className="mt-4 w-full text-[13px]">
-            <thead>
-              <tr className="text-left text-xs text-[#7C8BA1]">
-                <th className="pb-2 font-normal">Akurasi 5 kelas</th>
-                <th className="pb-2 text-right font-normal">Benar</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leakRows.map((r) => (
-                <tr key={r.name} className="border-t border-[#1B2634]">
-                  <td className="py-2.5 pr-3">
-                    <span className="text-[#F1F5F9]">{r.name}</span>
-                    <span className="block text-xs text-[#7C8BA1]">{r.note}</span>
-                    <span className="mt-1.5 block h-1 rounded-full bg-[#1B2634]">
-                      <span
-                        className={`block h-1 rounded-full ${r.bad ? "bg-[#F59E0B]" : "bg-[#10B981]"}`}
-                        style={{ width: `${r.value * 100}%` }}
-                      />
-                    </span>
-                  </td>
-                  <td className={`py-2.5 text-right align-top tabular-nums ${r.bad ? "text-[#FBBF24]" : "text-[#F1F5F9]"}`}>
-                    {pct1(r.value)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <Panel as="section" padding="md">
+          <SectionHeader
+            as="h2"
+            title="Kenapa akurasi lama 85% tidak dipakai"
+            subtitle={
+              <>
+                Kolom ringkasan di CSV seperti <code className="text-ink font-mono text-xs">peak_value_eur</code> dihitung dari seluruh riwayat, termasuk harga yang sedang ditebak.
+                {leak
+                  ? ` Pada ${pct1(leak.share_players_target_exposed)} pemain, kolom itu adalah jawabannya sendiri, dan aturan "nilai puncak naik" menebak kelas rising_star dengan tepat ${pct0(leak.rule_accuracy)}.`
+                  : ""}{" "}
+                Model sekarang hanya menghitung fitur dari riwayat sebelum harga target.
+              </>
+            }
+            className="mb-4"
+          />
+          <DataTable<LeakRow>
+            columns={leakColumns}
+            rows={leakRows}
+            rowKey={(r) => r.name}
+            compact
+            framed
+            ariaLabel="Tabel perbandingan kebocoran fitur"
+          />
           {leak ? (
-            <p className="mt-3 text-xs leading-relaxed text-[#7C8BA1]">
+            <p className="mt-3 text-xs leading-relaxed text-muted">
               Kuning berarti angkanya tidak bisa dipercaya: terbantu bocoran, atau fiturnya tidak sama dengan saat melatih. Empat
               kolom yang diuji: {leak.contamination_test.columns_added.join(", ")}.
             </p>
           ) : null}
-        </section>
+        </Panel>
 
-        <section className={`${panel} p-5`}>
-          <h3 className="text-base font-semibold text-[#F1F5F9]">Model lawan tebakan tanpa model</h3>
-          <p className="mt-2 text-[13px] leading-relaxed text-[#CBD5E1]">
-            Tebakan tanpa model berarti menganggap tidak ada yang berubah. Angka model baru berarti kalau mengalahkan itu.
-          </p>
-          <table className="mt-4 w-full text-[13px]">
-            <thead>
-              <tr className="text-xs text-[#7C8BA1]">
-                <th className="pb-2 text-left font-normal">Tugas</th>
-                <th className="pb-2 text-right font-normal">Model</th>
-                <th className="pb-2 text-right font-normal">Tanpa model</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scoreRows.map((r) => (
-                <tr key={r.name} className="border-t border-[#1B2634]">
-                  <td className="py-2.5 pr-3 text-[#F1F5F9]">
-                    {r.name}
-                    <span className="block text-xs text-[#7C8BA1]">{r.unit}</span>
-                  </td>
-                  <td className={`py-2.5 text-right align-top tabular-nums ${r.good ? "text-[#34D399]" : "text-[#FBBF24]"}`}>
-                    {r.model}
-                  </td>
-                  <td className="py-2.5 text-right align-top tabular-nums text-[#94A3B8]">{r.base}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="mt-3 text-xs leading-relaxed text-[#7C8BA1]">
+        <Panel as="section" padding="md">
+          <SectionHeader
+            as="h2"
+            title="Model lawan tebakan tanpa model"
+            subtitle="Tebakan tanpa model berarti menganggap tidak ada yang berubah. Angka model baru berarti kalau mengalahkan itu."
+            className="mb-4"
+          />
+          <DataTable<ScoreRow>
+            columns={scoreColumns}
+            rows={scoreRows}
+            rowKey={(r) => r.name}
+            framed
+            ariaLabel="Tabel skor model lawan tebakan tanpa model"
+          />
+          <p className="mt-3 text-xs leading-relaxed text-muted">
             Hijau berarti model lebih baik, kuning berarti belum. Semua diukur pada {num(ds.test_size)} pemain uji, kecuali baris 12
             bulan yang diuji pada update setelah pertengahan 2024.
           </p>
-        </section>
+        </Panel>
       </div>
 
-      <section className={`${panel} p-5`}>
-        <h3 className="text-base font-semibold text-[#F1F5F9]">Yang tidak bisa dijawab model ini</h3>
-        <ul className="mt-3 grid gap-x-8 gap-y-2.5 text-[13px] leading-relaxed text-[#CBD5E1] md:grid-cols-2 xl:grid-cols-3">
+      <Panel as="section" padding="md">
+        <SectionHeader
+          as="h2"
+          title="Yang tidak bisa dijawab model ini"
+          className="mb-3"
+        />
+        <ul className="grid gap-x-8 gap-y-3 text-[13px] leading-relaxed text-muted md:grid-cols-2 xl:grid-cols-3">
           <li>
-            <span className="font-semibold text-[#F1F5F9]">Kualitas bermain.</span> Yang ditebak adalah nilai pasar Transfermarkt,
+            <span className="font-medium text-ink">Kualitas bermain.</span> Yang ditebak adalah nilai pasar Transfermarkt,
             bukan harga transfer dan bukan performa.
           </li>
           <li>
-            <span className="font-semibold text-[#F1F5F9]">Lonjakan atau cedera mendadak.</span> Tidak ada data pertandingan,
+            <span className="font-medium text-ink">Lonjakan atau cedera mendadak.</span> Tidak ada data pertandingan,
             jadi model baru tahu setelah harganya berubah.
           </li>
           <li>
-            <span className="font-semibold text-[#F1F5F9]">Pindah klub.</span> Riwayat klub di data hanya benar untuk 508 dari{" "}
+            <span className="font-medium text-ink">Pindah klub.</span> Riwayat klub di data hanya benar untuk 508 dari{" "}
             {num(ds.total_players)} pemain.
           </li>
           <li>
-            <span className="font-semibold text-[#F1F5F9]">Pemain di luar daftar.</span> Data hanya berisi pemain yang pada 2025
+            <span className="font-medium text-ink">Pemain di luar daftar.</span> Data hanya berisi pemain yang pada 2025
             sudah di liga top, sehingga proyeksi pemain muda cenderung terlalu optimistis.
           </li>
           <li>
-            <span className="font-semibold text-[#F1F5F9]">Rentang pemain di atas €50M.</span> Hanya 59 sampai 67% harga asli
+            <span className="font-medium text-ink">Rentang pemain di atas €50M.</span> Hanya 59 sampai 67% harga asli
             yang masuk rentang, padahal targetnya 80%.
           </li>
           <li>
-            <span className="font-semibold text-[#F1F5F9]">Performa musim lalu.</span> Sudah dicoba ditambahkan (penampilan, gol,
+            <span className="font-medium text-ink">Performa musim lalu.</span> Sudah dicoba ditambahkan (penampilan, gol,
             transfer, cedera) dan tidak menaikkan akurasi: harga sudah memuatnya.
           </li>
         </ul>
-      </section>
+      </Panel>
 
-      <section className={`${panel} p-5`}>
-        <h3 className="text-base font-semibold text-[#F1F5F9]">Istilah yang dipakai di situs ini</h3>
-        <dl className="mt-3 grid gap-x-8 gap-y-3 text-[13px] leading-relaxed sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            ["Update harga", "Satu kali Transfermarkt merevisi nilai pasar pemain. Rata-rata tiap lima bulan."],
-            ["Tren 4 kelas", "Posisi harga terhadap puncak karier: dekat puncak, 20 sampai 30% di bawah, 30 sampai 60% di bawah, atau lebih."],
-            ["Tebakan tanpa model", "Menganggap harga atau kelasnya sama seperti terakhir. Pembanding wajib untuk setiap angka."],
-            ["Bocor (leakage)", "Fitur yang diam-diam memuat jawaban. Akurasi tampak tinggi tapi tidak berlaku untuk masa depan."],
-            ["Rentang 80%", "Batas bawah dan atas tebakan. Dikalibrasi supaya 8 dari 10 harga asli jatuh di dalamnya."],
-            ["Uji ke masa depan", "Model dilatih hanya dari data sebelum satu tanggal, lalu diuji pada update sesudahnya."],
-            ["Skala log", "Mengukur selisih dalam persen, bukan Euro, supaya pemain murah dan mahal dinilai setara."],
-            ["Sinyal beli / risiko", "Hanya muncul kalau peluang naik atau turun lebih dari 5% dalam setahun minimal 70%."],
-          ].map(([term, desc]) => (
-            <div key={term}>
-              <dt className="font-semibold text-[#F1F5F9]">{term}</dt>
-              <dd className="text-[#94A3B8]">{desc}</dd>
+      <Panel as="section" padding="md">
+        <SectionHeader
+          as="h2"
+          title="Istilah yang dipakai di situs ini"
+          className="mb-4"
+        />
+        <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-[13px] leading-relaxed">
+          {GLOSSARY_ITEMS.map(([term, desc]) => (
+            <div key={term} className="border-t border-rule pt-3">
+              <dt className="font-medium text-ink">{term}</dt>
+              <dd className="mt-1 text-xs text-muted leading-relaxed">{desc}</dd>
             </div>
           ))}
         </dl>
-      </section>
+      </Panel>
     </div>
   );
 }

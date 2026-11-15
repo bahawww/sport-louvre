@@ -1,10 +1,12 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { Badge, Button, Panel, SectionHeader } from "@/components/ui";
 import type { OverviewResponse, SimulateResponse } from "@/lib/api";
 import { fmt } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export interface WorkflowStep {
   stage: string;
@@ -24,21 +26,34 @@ const num = (x: number) => new Intl.NumberFormat("id-ID").format(Math.round(x));
 const pct0 = (x: number) => `${Math.round(x * 100)}%`;
 
 /** A labelled horizontal bar split into parts; widths follow the real counts. */
-function SplitBar({ parts }: { parts: { label: string; value: number; tone: "main" | "accent" | "muted" }[] }) {
+function SplitBar({
+  parts,
+}: {
+  parts: { label: string; value: number; tone: "main" | "accent" | "muted" }[];
+}) {
   const total = parts.reduce((a, p) => a + p.value, 0) || 1;
-  const tone = { main: "bg-[#CBD5E1]", accent: "bg-[#10B981]", muted: "bg-[#3B4A5E]" };
+  const toneClasses: Record<"main" | "accent" | "muted", string> = {
+    main: "bg-muted",
+    accent: "bg-positive",
+    muted: "bg-control",
+  };
+
   return (
     <div>
-      <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full">
+      <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-raised">
         {parts.map((p) => (
-          <span key={p.label} className={tone[p.tone]} style={{ width: `${Math.max(1.5, (p.value / total) * 100)}%` }} />
+          <span
+            key={p.label}
+            className={toneClasses[p.tone]}
+            style={{ width: `${Math.max(1.5, (p.value / total) * 100)}%` }}
+          />
         ))}
       </div>
-      <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-[#94A3B8]">
+      <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-muted">
         {parts.map((p) => (
           <span key={p.label} className="inline-flex items-center gap-1.5">
-            <span className={`size-2 rounded-full ${tone[p.tone]}`} />
-            <span className="tabular-nums text-[#F1F5F9]">{num(p.value)}</span> {p.label}
+            <span className={cn("size-2 rounded-full", toneClasses[p.tone])} />
+            <span className="tabular-nums text-ink">{num(p.value)}</span> {p.label}
           </span>
         ))}
       </div>
@@ -48,11 +63,11 @@ function SplitBar({ parts }: { parts: { label: string; value: number; tone: "mai
 
 function Rows({ rows }: { rows: [string, string][] }) {
   return (
-    <dl className="divide-y divide-[#1B2634] text-[13px]">
+    <dl className="divide-y divide-rule text-[13px]">
       {rows.map(([k, v]) => (
         <div key={k} className="flex items-baseline justify-between gap-4 py-1.5">
-          <dt className="text-[#94A3B8]">{k}</dt>
-          <dd className="text-right tabular-nums text-[#F1F5F9]">{v}</dd>
+          <dt className="text-muted">{k}</dt>
+          <dd className="text-right tabular-nums text-ink">{v}</dd>
         </div>
       ))}
     </dl>
@@ -70,16 +85,24 @@ function CutIllustration({ sim }: { sim: SimulateResponse }) {
   const vMax = Math.max(...hist.map((h) => h.value_eur)) * 1.08;
   const x = (d: string) => 6 + ((new Date(d).getTime() - t0) / (t1 - t0)) * (W - 12);
   const y = (v: number) => 8 + (1 - v / vMax) * (H - 18);
-  const path = (pts: typeof hist) => pts.map((h, i) => `${i ? "L" : "M"}${x(h.date).toFixed(1)} ${y(h.value_eur).toFixed(1)}`).join(" ");
+  const path = (pts: typeof hist) =>
+    pts.map((h, i) => `${i ? "L" : "M"}${x(h.date).toFixed(1)} ${y(h.value_eur).toFixed(1)}`).join(" ");
   const answer = hist[cut];
+
   return (
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="block w-full" role="img" aria-label="Riwayat harga dipotong menjadi bahan dan jawaban">
-        <rect x={x(answer.date)} y={0} width={W - x(answer.date)} height={H} fill="#0F1721" />
-        <path d={path(hist.slice(cut))} fill="none" stroke="#3B4A5E" strokeWidth="1.5" strokeDasharray="3 4" />
-        <path d={path(hist.slice(0, cut))} fill="none" stroke="#E2E8F0" strokeWidth="2" strokeLinejoin="round" />
-        <line x1={x(answer.date)} x2={x(answer.date)} y1={0} y2={H} stroke="#10B981" strokeWidth="1" />
-        <circle cx={x(answer.date)} cy={y(answer.value_eur)} r="5" fill="#10B981" />
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="block w-full max-w-full h-auto rounded-control border border-border"
+        role="img"
+        aria-label="Riwayat harga dipotong menjadi bahan dan jawaban"
+      >
+        <rect x={0} y={0} width={W} height={H} fill="var(--surface)" />
+        <rect x={x(answer.date)} y={0} width={W - x(answer.date)} height={H} fill="var(--raised)" />
+        <path d={path(hist.slice(cut))} fill="none" stroke="var(--grid)" strokeWidth="1.5" strokeDasharray="3 4" />
+        <path d={path(hist.slice(0, cut))} fill="none" stroke="var(--text)" strokeWidth="2" strokeLinejoin="round" />
+        <line x1={x(answer.date)} x2={x(answer.date)} y1={0} y2={H} stroke="var(--chart-1)" strokeWidth="1" />
+        <circle cx={x(answer.date)} cy={y(answer.value_eur)} r="5" fill="var(--chart-1)" />
       </svg>
       <input
         type="range"
@@ -88,19 +111,27 @@ function CutIllustration({ sim }: { sim: SimulateResponse }) {
         value={cut}
         onChange={(e) => setCut(Number(e.target.value))}
         aria-label="Geser titik potong"
-        className="mt-2 w-full accent-[#10B981]"
+        className="mt-3 w-full cursor-pointer accent-primary"
       />
-      <p className="mt-1 text-[13px] leading-relaxed text-[#94A3B8]">
+      <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
         Soal ke-{cut} dari {hist.length - 1} milik {sim.player!.name}: bahan{" "}
-        <span className="text-[#F1F5F9]">{cut} valuasi</span> sampai {hist[cut - 1].date.slice(0, 7)}, jawaban{" "}
-        <span className="text-[#34D399]">{fmt.eur(answer.value_eur)}</span> pada {answer.date.slice(0, 7)}. Geser untuk pindah
+        <span className="text-ink font-medium">{cut} valuasi</span> sampai {hist[cut - 1].date.slice(0, 7)}, jawaban{" "}
+        <span className="text-positive font-medium">{fmt.eur(answer.value_eur)}</span> pada {answer.date.slice(0, 7)}. Geser untuk pindah
         soal.
       </p>
     </div>
   );
 }
 
-function Illustration({ index, overview, sim }: { index: number; overview: OverviewResponse; sim?: SimulateResponse }) {
+function Illustration({
+  index,
+  overview,
+  sim,
+}: {
+  index: number;
+  overview: OverviewResponse;
+  sim?: SimulateResponse;
+}) {
   const ds = overview.dataset as OverviewResponse["dataset"] & { panel_rows?: number; train_rows?: number };
   const repairs = (overview.data_card?.repairs ?? {}) as Record<string, number>;
   const used = overview.data_card?.valuation_points ?? ds.history_rows;
@@ -115,7 +146,7 @@ function Illustration({ index, overview, sim }: { index: number; overview: Overv
 
   if (index === 0) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         <Rows
           rows={[
             ["transfermarkt_player_values.csv", `${num(ds.total_players)} baris, 36 kolom`],
@@ -124,18 +155,20 @@ function Illustration({ index, overview, sim }: { index: number; overview: Overv
         />
         {hist ? (
           <div>
-            <p className="text-[13px] text-[#94A3B8]">Tiga baris terakhir {sim!.player!.name} di file riwayat:</p>
-            <table className="mt-1.5 w-full text-[13px]">
-              <tbody>
-                {hist.slice(-3).map((h) => (
-                  <tr key={h.date} className="border-t border-[#1B2634]">
-                    <td className="py-1.5 font-mono text-xs text-[#94A3B8]">{sim!.player!.player_id}</td>
-                    <td className="py-1.5 font-mono text-xs text-[#CBD5E1]">{h.date}</td>
-                    <td className="py-1.5 text-right tabular-nums text-[#F1F5F9]">{num(h.value_eur)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <p className="text-[13px] text-muted">Tiga baris terakhir {sim!.player!.name} di file riwayat:</p>
+            <div className="mt-2 overflow-x-auto rounded-control border border-rule">
+              <table className="w-full text-[13px]">
+                <tbody className="divide-y divide-rule">
+                  {hist.slice(-3).map((h) => (
+                    <tr key={h.date} className="bg-raised/30">
+                      <td className="px-3 py-1.5 font-mono text-xs text-muted">{sim!.player!.player_id}</td>
+                      <td className="px-3 py-1.5 font-mono text-xs text-ink">{h.date}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-ink">{num(h.value_eur)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : null}
       </div>
@@ -146,7 +179,7 @@ function Illustration({ index, overview, sim }: { index: number; overview: Overv
     return (
       <div className="space-y-5">
         <div>
-          <p className="mb-2 text-[13px] text-[#94A3B8]">{num(broken)} pemain lama dengan kolom posisi bergeser</p>
+          <p className="mb-2 text-[13px] text-muted">{num(broken)} pemain lama dengan kolom posisi bergeser</p>
           <SplitBar
             parts={[
               { label: "diperbaiki", value: repairs.positions_repaired_from_sidecar ?? 0, tone: "accent" },
@@ -165,13 +198,15 @@ function Illustration({ index, overview, sim }: { index: number; overview: Overv
     );
   }
   if (index === 2) {
-    return sim?.player ? <CutIllustration sim={sim} /> : <p className="text-[13px] text-[#94A3B8]">Memuat riwayat contoh...</p>;
+    return sim?.player ? <CutIllustration sim={sim} /> : <p className="text-[13px] text-muted">Memuat riwayat contoh...</p>;
   }
   if (index === 3) {
     const n = (k: string) => Number(feats?.[k] ?? 0);
     return feats ? (
       <div>
-        <p className="mb-1 text-[13px] text-[#94A3B8]">Enam dari {overview.regression.tasks?.forecast.features.length} fitur {sim!.player!.name} hari ini:</p>
+        <p className="mb-2 text-[13px] text-muted">
+          Enam dari {overview.regression.tasks?.forecast.features.length} fitur {sim!.player!.name} hari ini:
+        </p>
         <Rows
           rows={[
             ["Harga terakhir", fmt.eur(n("last_value_eur"))],
@@ -184,7 +219,7 @@ function Illustration({ index, overview, sim }: { index: number; overview: Overv
         />
       </div>
     ) : (
-      <p className="text-[13px] text-[#94A3B8]">Memuat fitur contoh...</p>
+      <p className="text-[13px] text-muted">Memuat fitur contoh...</p>
     );
   }
   if (index === 4) {
@@ -196,7 +231,7 @@ function Illustration({ index, overview, sim }: { index: number; overview: Overv
             { label: "pemain uji", value: ds.test_size, tone: "accent" },
           ]}
         />
-        <p className="mt-3 text-[13px] leading-relaxed text-[#94A3B8]">
+        <p className="mt-3 text-[13px] leading-relaxed text-muted">
           Kalau dibagi per baris, soal ke-20 seorang pemain bisa ada di latih dan soal ke-21 di uji. Model lalu tampak pintar
           hanya karena sudah mengenal pemainnya.
         </p>
@@ -211,22 +246,25 @@ function Illustration({ index, overview, sim }: { index: number; overview: Overv
     const max = Math.max(...rows.map((r) => r.loss), 1);
     return (
       <div>
-        <p className="mb-2 text-[13px] text-[#94A3B8]">Galat peluang (log-loss) di validasi silang. Makin kecil makin baik.</p>
-        <ul className="space-y-2">
+        <p className="mb-2 text-[13px] text-muted">Galat peluang (log-loss) di validasi silang. Makin kecil makin baik.</p>
+        <ul className="space-y-2.5">
           {rows.map((r) => {
             const chosen = r.name === clean.best_model;
             return (
               <li key={r.name} className="text-[13px]">
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className={chosen ? "font-semibold text-[#F1F5F9]" : "text-[#CBD5E1]"}>
+                  <span className={chosen ? "font-semibold text-ink" : "text-muted"}>
                     {r.name.startsWith("Persistence") ? "Tanpa model" : r.name}
                     {chosen ? " (terpilih)" : ""}
                   </span>
-                  <span className="tabular-nums text-[#94A3B8]">{r.loss.toFixed(3).replace(".", ",")}</span>
+                  <span className="tabular-nums text-muted">{r.loss.toFixed(3).replace(".", ",")}</span>
                 </div>
-                <span className="mt-1 block h-1 rounded-full bg-[#1B2634]">
+                <span className="mt-1 block h-1.5 rounded-full bg-rule overflow-hidden">
                   <span
-                    className={`block h-1 rounded-full ${chosen ? "bg-[#10B981]" : "bg-[#64748B]"}`}
+                    className={cn(
+                      "block h-1.5 rounded-full transition-all",
+                      chosen ? "bg-positive" : "bg-control"
+                    )}
                     style={{ width: `${(r.loss / max) * 100}%` }}
                   />
                 </span>
@@ -242,7 +280,7 @@ function Illustration({ index, overview, sim }: { index: number; overview: Overv
     return (
       <div className="space-y-5">
         <div>
-          <p className="mb-2 text-[13px] text-[#94A3B8]">Model harga, tren, dan nilai wajar</p>
+          <p className="mb-2 text-[13px] text-muted">Model harga, tren, dan nilai wajar</p>
           <SplitBar
             parts={[
               { label: "soal dipakai melatih", value: train, tone: "accent" },
@@ -261,21 +299,28 @@ function Illustration({ index, overview, sim }: { index: number; overview: Overv
     const M = 16; // inset so the largest dot stays inside the frame
     return cal ? (
       <div className="flex flex-wrap items-center gap-5">
-        <svg viewBox={`0 0 ${S} ${S}`} width={S} height={S} role="img" aria-label="Peluang yang diberikan model lawan kenyataan">
-          <rect x="0" y="0" width={S} height={S} fill="#0F1721" />
-          <line x1={M} y1={S - M} x2={S - M} y2={M} stroke="#3B4A5E" strokeWidth="1" strokeDasharray="3 4" />
+        <svg
+          viewBox={`0 0 ${S} ${S}`}
+          width={S}
+          height={S}
+          role="img"
+          aria-label="Peluang yang diberikan model lawan kenyataan"
+          className="shrink-0 rounded-control border border-border"
+        >
+          <rect x="0" y="0" width={S} height={S} fill="var(--surface)" />
+          <line x1={M} y1={S - M} x2={S - M} y2={M} stroke="var(--grid)" strokeWidth="1" strokeDasharray="3 4" />
           {cal.map((b) => (
             <circle
               key={b.predicted}
               cx={M + b.predicted * (S - 2 * M)}
               cy={M + (1 - b.observed) * (S - 2 * M)}
               r={3 + Math.sqrt(b.n) / 3}
-              fill="#10B981"
+              fill="var(--chart-1)"
               fillOpacity="0.75"
             />
           ))}
         </svg>
-        <p className="min-w-40 flex-1 text-[13px] leading-relaxed text-[#94A3B8]">
+        <p className="min-w-40 flex-1 text-[13px] leading-relaxed text-muted">
           Tiap titik adalah sekelompok tebakan tren. Ke kanan: seberapa yakin model. Ke atas: seberapa sering benar. Titik di
           garis putus-putus berarti peluangnya jujur. Titik besar berarti banyak pemain.
         </p>
@@ -286,7 +331,7 @@ function Illustration({ index, overview, sim }: { index: number; overview: Overv
     return oot ? (
       <div className="space-y-5">
         <div>
-          <p className="mb-2 text-[13px] text-[#94A3B8]">Uji ke masa depan, dipisah pada {oot.cutoff}</p>
+          <p className="mb-2 text-[13px] text-muted">Uji ke masa depan, dipisah pada {oot.cutoff}</p>
           <SplitBar
             parts={[
               { label: "soal sebelum tanggal itu, untuk melatih", value: oot.train_rows, tone: "main" },
@@ -320,68 +365,114 @@ export function WorkflowRoadmap({
   sim?: SimulateResponse;
 }) {
   const [active, setActive] = useState(0);
+  const tablistRef = useRef<HTMLDivElement>(null);
   const last = steps.length - 1;
   const step = steps[active];
   const phase = PHASES.find((p) => active >= p.from && active <= p.to)!;
   const go = (i: number) => setActive(Math.max(0, Math.min(last, i)));
 
+  useEffect(() => {
+    const container = tablistRef.current;
+    if (!container) return;
+    const selectedBtn = container.querySelector('[aria-selected="true"]') as HTMLElement | null;
+    if (selectedBtn) {
+      const btnLeft = selectedBtn.offsetLeft;
+      const btnRight = btnLeft + selectedBtn.offsetWidth;
+      const cLeft = container.scrollLeft;
+      const cRight = cLeft + container.clientWidth;
+      if (btnLeft < cLeft || btnRight > cRight) {
+        selectedBtn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      }
+    }
+  }, [active]);
+
   return (
-    <div>
-      <div
-        role="tablist"
-        aria-label="Tahap alur kerja"
-        onKeyDown={(e) => {
-          if (e.key === "ArrowRight") go(active + 1);
-          if (e.key === "ArrowLeft") go(active - 1);
-        }}
-        className="px-3 pt-5 sm:px-5"
-      >
-        <div className="grid grid-cols-10 text-xs text-[#7C8BA1]">
+    <Panel as="section" padding="none" surface="default" className="overflow-hidden">
+      <div className="p-4 sm:p-5 border-b border-border">
+        <SectionHeader
+          as="h2"
+          title="Alur kerja dari CSV sampai model"
+          subtitle="Sepuluh tahap yang dijalankan tiap kali model dilatih. Pilih satu tahap untuk melihat apa yang terjadi pada data."
+          actions={
+            <Badge variant="neutral" size="sm">
+              {active + 1} dari {steps.length}
+            </Badge>
+          }
+        />
+      </div>
+
+      <div className="border-b border-border bg-ground/40 p-3 sm:p-4">
+        {/* Phase headers for desktop */}
+        <div className="hidden sm:grid grid-cols-10 gap-1.5 mb-2 text-xs text-muted">
           {PHASES.map((p) => (
-            <span
+            <div
               key={p.label}
               style={{ gridColumn: `${p.from + 1} / ${p.to + 2}` }}
-              className={`truncate border-l border-[#243244] pb-2 pl-2 ${phase === p ? "text-[#F1F5F9]" : ""}`}
+              className={cn(
+                "border-l border-rule pl-2 font-medium truncate transition-colors",
+                phase === p ? "text-ink" : "text-faint"
+              )}
             >
               {p.label}
-            </span>
+            </div>
           ))}
         </div>
 
-        <div className="relative grid grid-cols-10">
-          <span className="absolute left-[5%] right-[5%] top-[13px] h-0.5 bg-[#243244]" />
-          <span
-            className="absolute left-[5%] top-[13px] h-0.5 bg-[#10B981] transition-[width] duration-300 motion-reduce:transition-none"
-            style={{ width: `${(active / last) * 90}%` }}
-          />
+        {/* Phase label for mobile */}
+        <div className="sm:hidden flex items-center justify-between pb-2 text-xs text-muted">
+          <span>
+            Fase: <strong className="text-ink font-medium">{phase.label}</strong>
+          </span>
+          <span className="tabular-nums">
+            Langkah {active + 1} dari {steps.length}
+          </span>
+        </div>
+
+        {/* Accessible step selector */}
+        <div
+          ref={tablistRef}
+          role="tablist"
+          aria-label="Tahap alur kerja"
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight") {
+              e.preventDefault();
+              go(active + 1);
+            }
+            if (e.key === "ArrowLeft") {
+              e.preventDefault();
+              go(active - 1);
+            }
+          }}
+          className="flex sm:grid sm:grid-cols-10 gap-1.5 overflow-x-auto pb-1 sm:pb-0 scroll-smooth [scrollbar-width:thin]"
+        >
           {steps.map((s, i) => {
-            const state = i === active ? "now" : i < active ? "done" : "todo";
+            const isCurrent = i === active;
+            const isPast = i < active;
             return (
               <button
                 key={s.stage}
                 role="tab"
                 type="button"
-                aria-selected={i === active}
-                tabIndex={i === active ? 0 : -1}
+                aria-selected={isCurrent}
+                tabIndex={isCurrent ? 0 : -1}
                 onClick={() => go(i)}
-                className="group relative flex flex-col items-center gap-2 pb-4 pt-1 outline-none"
+                className={cn(
+                  "flex flex-col items-center justify-center gap-1 rounded-control border px-2 py-1.5 transition-colors shrink-0",
+                  "min-w-[92px] sm:min-w-0 sm:flex-1",
+                  "min-h-[44px] lg:min-h-[38px]",
+                  "outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none",
+                  isCurrent
+                    ? "bg-active border-control text-ink font-medium"
+                    : "bg-raised border-border text-muted hover:text-ink"
+                )}
               >
-                <span
-                  className={`flex size-5 items-center justify-center rounded-full border-2 text-[10px] font-semibold tabular-nums transition group-focus-visible:ring-2 group-focus-visible:ring-[#F1F5F9] ${
-                    state === "now"
-                      ? "scale-125 border-[#10B981] bg-[#10B981] text-[#0B1117]"
-                      : state === "done"
-                        ? "border-[#10B981] bg-[#121A24] text-[#34D399]"
-                        : "border-[#3B4A5E] bg-[#121A24] text-[#7C8BA1] group-hover:border-[#94A3B8]"
-                  }`}
-                >
-                  {i + 1}
-                </span>
-                <span
-                  className={`hidden px-1 text-center text-xs leading-tight sm:block ${
-                    state === "now" ? "font-semibold text-[#F1F5F9]" : "text-[#94A3B8] group-hover:text-[#F1F5F9]"
-                  }`}
-                >
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-semibold tabular-nums">{i + 1}</span>
+                  {isPast ? (
+                    <span className="size-1.5 rounded-full bg-positive inline-block" />
+                  ) : null}
+                </div>
+                <span className="text-[11px] leading-tight truncate w-full text-center">
                   {s.stage}
                 </span>
               </button>
@@ -392,43 +483,56 @@ export function WorkflowRoadmap({
 
       <div
         role="tabpanel"
-        className="grid border-t border-[#243244] lg:min-h-[336px] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]"
+        className="grid divide-y lg:divide-y-0 lg:divide-x divide-border lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:min-h-[340px]"
       >
-        <div className="flex flex-col p-5">
-          <p className="text-[13px] text-[#7C8BA1]">
-            Tahap {active + 1} dari {steps.length}, {phase.label.toLowerCase()}
+        <div className="flex flex-col p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[13px] text-faint">
+              Tahap {active + 1} dari {steps.length}, {phase.label.toLowerCase()}
+            </p>
+            <code className="font-mono text-xs text-muted rounded-chip bg-raised px-2 py-0.5 border border-rule">
+              {step.code}
+            </code>
+          </div>
+          <h3 className="mt-2 text-lg font-semibold text-ink">
+            {step.stage}
+          </h3>
+          <p className="mt-2.5 text-sm leading-relaxed text-muted">
+            {step.does}
           </p>
-          <h4 className="mt-1 text-lg font-semibold text-[#F1F5F9]">{step.stage}</h4>
-          <code className="text-xs text-[#7C8BA1]">{step.code}</code>
-          <p className="mt-3 text-sm leading-relaxed text-[#CBD5E1]">{step.does}</p>
-          <p className="mt-4 text-[13px] text-[#94A3B8]">
-            <span className="text-2xl font-semibold tabular-nums text-[#F1F5F9]">{step.figure}</span> {step.unit}
-          </p>
-          <div className="mt-auto flex gap-2 pt-5">
-            <button
-              type="button"
+          <div className="mt-4 pt-3 border-t border-rule text-[13px] text-muted">
+            <span className="text-2xl font-semibold tabular-nums text-ink">
+              {step.figure}
+            </span>{" "}
+            <span>{step.unit}</span>
+          </div>
+          <div className="mt-auto flex items-center gap-2 pt-5">
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => go(active - 1)}
               disabled={active === 0}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#243244] px-3 py-1.5 text-[13px] font-medium text-[#F1F5F9] transition hover:border-[#94A3B8] disabled:opacity-40"
+              aria-label="Tahap sebelumnya"
             >
               <ChevronLeft className="size-4" />
               Sebelumnya
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => go(active + 1)}
               disabled={active === last}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#243244] px-3 py-1.5 text-[13px] font-medium text-[#F1F5F9] transition hover:border-[#94A3B8] disabled:opacity-40"
+              aria-label="Tahap berikutnya"
             >
               Berikutnya
               <ChevronRight className="size-4" />
-            </button>
+            </Button>
           </div>
         </div>
-        <div className="border-t border-[#243244] bg-[#0B1117] p-5 lg:border-l lg:border-t-0">
+        <div className="bg-ground/40 p-4 sm:p-5 flex flex-col justify-center">
           <Illustration index={active} overview={overview} sim={sim} />
         </div>
       </div>
-    </div>
+    </Panel>
   );
 }

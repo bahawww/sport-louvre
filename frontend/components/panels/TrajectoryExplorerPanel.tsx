@@ -2,9 +2,25 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { EChart } from "@/components/chart";
+import {
+  EChart,
+  chartTooltipBase,
+  useChartTheme,
+  type ChartOption,
+} from "@/components/chart";
 import { ClubBadge, LeagueBadge, PlayerAvatar } from "@/components/entity-media";
 import { TrajectoryBadge } from "@/components/trajectory-badge";
+import {
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  Panel,
+  PanelDividerGrid,
+  PlayerCell,
+  SectionHeader,
+  Skeleton,
+  Stat,
+} from "@/components/ui";
 import { useApi, type HistoryResponse, type PlayerHistoryItem } from "@/lib/api";
 import { fmt } from "@/lib/format";
 
@@ -36,162 +52,277 @@ export function TrajectoryExplorerPanel() {
     }
   }, [players, selectedId]);
 
-  const chartOption = useMemo(() => {
+  const theme = useChartTheme();
+
+  const chartOption: ChartOption | null = useMemo(() => {
     if (!activePlayer || !activePlayer.history.length) return null;
     const pts = activePlayer.history;
     return {
       backgroundColor: "transparent",
       tooltip: {
+        ...chartTooltipBase(theme),
         trigger: "axis",
-        backgroundColor: "#182230",
-        borderColor: "#243244",
-        textStyle: { color: "#F1F5F9" },
-        formatter: (params: { dataIndex: number }[]) => {
-          const pt = pts[params[0]?.dataIndex ?? 0];
+        formatter: (params: unknown) => {
+          const list = Array.isArray(params)
+            ? (params as { dataIndex: number }[])
+            : [(params as { dataIndex: number })];
+          const pt = pts[list[0]?.dataIndex ?? 0];
           if (!pt) return "";
           return `<strong>${pt.date}</strong><br/>Valuasi: ${fmt.eur(pt.value_eur)}<br/>Klub: ${pt.club} (Usia ${pt.age_at_date})`;
         },
       },
-      grid: { left: 64, right: 20, top: 24, bottom: 36 },
+      grid: { left: 56, right: 16, top: 24, bottom: 28 },
       xAxis: {
         type: "category",
         data: pts.map((p) => p.date),
-        axisLabel: { color: "#94A3B8", fontSize: 11 },
-        axisLine: { lineStyle: { color: "#243244" } },
+        axisLabel: {
+          color: theme.axisInk,
+          fontSize: 11,
+        },
+        axisLine: {
+          lineStyle: { color: theme.border },
+        },
+        axisTick: {
+          show: false,
+        },
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: "#94A3B8", fontSize: 11, formatter: (v: number) => fmt.eurShort(v) },
-        splitLine: { lineStyle: { color: "#1E293B" } },
+        axisLabel: {
+          color: theme.axisInk,
+          fontSize: 11,
+          formatter: (v: number) => fmt.eurShort(v),
+        },
+        axisLine: {
+          show: false,
+        },
+        axisTick: {
+          show: false,
+        },
+        splitLine: {
+          lineStyle: { color: theme.grid },
+        },
       },
       series: [
         {
           name: "Nilai Pasar (€)",
           type: "line",
-          symbolSize: 7,
-          lineStyle: { width: 2.5, color: "#10B981" },
-          itemStyle: { color: "#10B981" },
-          areaStyle: { color: "rgba(16, 185, 129, 0.12)" },
-          markPoint: {
-            data: [{ type: "max", name: "Peak", itemStyle: { color: "#F59E0B" } }],
-            label: { formatter: (p: { value: number }) => fmt.eurShort(p.value), color: "#0B1117" },
-          },
+          symbol: "circle",
+          symbolSize: 6,
+          showSymbol: pts.length <= 20,
+          lineStyle: { width: 2, color: theme.chart1 },
+          itemStyle: { color: theme.chart1 },
+          areaStyle: { color: theme.chart1, opacity: 0.08 },
           data: pts.map((p) => p.value_eur),
         },
       ],
     };
-  }, [activePlayer]);
+  }, [activePlayer, theme]);
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap gap-3">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Cari nama pemain atau klub (contoh: Haaland, Arsenal)..."
-          className="min-w-[240px] flex-1 rounded-lg border border-[#243244] bg-[#121A24] px-3.5 py-2 text-sm text-[#F1F5F9] placeholder-[#64748B]"
-        />
-        <select
-          value={league}
-          onChange={(e) => setLeague(e.target.value)}
-          className="rounded-lg border border-[#243244] bg-[#121A24] px-3.5 py-2 text-sm text-[#F1F5F9]"
-        >
-          <option value="">Semua 5 Liga Top</option>
-          {LEAGUES.filter(Boolean).map((l) => (
-            <option key={l} value={l}>
-              {l}
-            </option>
-          ))}
-        </select>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Tren Nilai Pasar Sepanjang Karier"
+        subtitle="Telusuri riwayat valuasi pasar pemain Transfermarkt dari titik pertama hingga musim 2025/2026."
+      />
 
-      <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <div className="rounded-xl border border-[#243244] bg-[#121A24] p-3">
-          <p className="px-2 pb-2 text-xs font-semibold text-[#94A3B8]">
-            Pemain ({players.length})
-          </p>
-          <div className="max-h-[440px] divide-y divide-[#1E293B] overflow-y-auto">
-            {players.map((p) => {
-              const active = activePlayer?.player_id === p.player_id;
-              return (
-                <button
-                  key={p.player_id}
-                  type="button"
-                  onClick={() => setSelectedId(p.player_id)}
-                  className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition ${
-                    active ? "bg-[#182230]" : "hover:bg-[#182230]/50"
-                  }`}
-                >
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <PlayerAvatar playerId={p.player_id} name={p.name} size={34} />
-                    <div className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-[#F1F5F9]">
-                        {p.name}
-                      </span>
-                      <span className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-[#94A3B8]">
-                        <ClubBadge playerId={p.player_id} club={p.peak_club} size={13} />
-                        <span>·</span>
-                        <LeagueBadge league={p.league_name} size={13} showName={false} />
-                      </span>
-                    </div>
-                  </div>
-                  <span className="shrink-0 text-xs font-bold text-[#10B981]">
-                    {fmt.eurShort(p.current_value_eur)}
-                  </span>
-                </button>
-              );
-            })}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* Left column (lg:col-span-4): Panel list */}
+        <Panel padding="sm" className="lg:col-span-4">
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Cari nama pemain atau klub..."
+              aria-label="Cari nama pemain atau klub"
+              className="w-full min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-[13px] text-ink placeholder:text-faint focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <select
+              value={league}
+              onChange={(e) => setLeague(e.target.value)}
+              aria-label="Filter liga"
+              className="w-full min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">Semua 5 Liga Top</option>
+              {LEAGUES.filter(Boolean).map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
 
-        <div className="rounded-xl border border-[#243244] bg-[#121A24] p-5">
-          {activePlayer ? (
+          <div className="mt-3">
+            {res.isError ? (
+              <ErrorState
+                title="Gagal Memuat Pemain"
+                description="Terjadi kesalahan saat mengambil daftar pemain."
+                onRetry={() => res.refetch()}
+              />
+            ) : res.isLoading ? (
+              <div className="divide-y divide-rule" aria-busy="true">
+                {Array.from({ length: 7 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 py-2.5 px-3">
+                    <Skeleton className="h-8 w-8 rounded-full shrink-0" />
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <Skeleton className="h-3.5 w-28" />
+                      <Skeleton className="h-3 w-36" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : players.length === 0 ? (
+              <EmptyState
+                title="Tidak Ada Pemain"
+                description="Tidak ada pemain yang cocok dengan filter pencarian."
+              />
+            ) : (
+              <div className="divide-y divide-rule max-h-[380px] lg:max-h-[415px] overflow-y-auto">
+                {players.map((p) => {
+                  const isSelected = activePlayer?.player_id === p.player_id;
+                  return (
+                    <button
+                      key={p.player_id}
+                      type="button"
+                      onClick={() => setSelectedId(p.player_id)}
+                      aria-selected={isSelected}
+                      className={`min-h-[44px] w-full px-3 py-2.5 text-left transition-colors flex items-center justify-between gap-2 ${
+                        isSelected ? "bg-active" : "hover:bg-raised/60"
+                      }`}
+                    >
+                      <PlayerCell
+                        playerId={p.player_id}
+                        name={p.name}
+                        club={p.peak_club}
+                        meta={fmt.eurShort(p.current_value_eur)}
+                        avatarSize={32}
+                        badge={<TrajectoryBadge value={p.trajectory} />}
+                        className="w-full"
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Panel>
+
+        {/* Right column (lg:col-span-8): Detail panel */}
+        <Panel className="lg:col-span-8">
+          {res.isLoading ? (
+            <div className="space-y-4" aria-busy="true">
+              <div className="flex items-center gap-3.5 border-b border-rule pb-4">
+                <Skeleton className="h-12 w-12 rounded-full shrink-0" />
+                <div className="space-y-2">
+                  <Skeleton className="h-5 w-48" />
+                  <Skeleton className="h-3.5 w-64" />
+                </div>
+              </div>
+              <div className="rounded-panel border border-border bg-raised p-0">
+                <div className="grid grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-rule">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="p-4 space-y-2">
+                      <Skeleton className="h-3 w-16" />
+                      <Skeleton className="h-6 w-24" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-5 space-y-3">
+                <Skeleton className="h-5 w-40" />
+                <Skeleton className="h-[320px] w-full" />
+              </div>
+            </div>
+          ) : !activePlayer ? (
+            <EmptyState
+              title="Pilih Pemain"
+              description="Pilih pemain dari daftar di sebelah kiri untuk melihat riwayat nilai pasar."
+            />
+          ) : (
             <>
-              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#1E293B] pb-4">
-                <div className="flex items-center gap-3.5">
-                  <PlayerAvatar playerId={activePlayer.player_id} name={activePlayer.name} size={56} />
-                  <div>
-                    <h3 className="text-xl font-extrabold text-[#F1F5F9]">{activePlayer.name}</h3>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#94A3B8]">
-                      <ClubBadge playerId={activePlayer.player_id} club={activePlayer.peak_club} size={16} />
-                      <span>·</span>
-                      <LeagueBadge league={activePlayer.league_name} size={16} />
-                      <span>· {activePlayer.nationality} · Usia {activePlayer.age} thn</span>
+              {/* Player summary header */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-rule pb-4">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <PlayerAvatar
+                    playerId={activePlayer.player_id}
+                    name={activePlayer.name}
+                    size={48}
+                  />
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-semibold text-ink truncate">
+                      {activePlayer.name}
+                    </h2>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                      <ClubBadge
+                        playerId={activePlayer.player_id}
+                        club={activePlayer.peak_club}
+                        size={14}
+                      />
+                      <span className="text-faint">·</span>
+                      <LeagueBadge league={activePlayer.league_name} size={14} />
+                      <span className="text-faint">·</span>
+                      <span>{activePlayer.nationality}</span>
+                      <span className="text-faint">·</span>
+                      <span>Usia {activePlayer.age} thn</span>
                     </div>
                   </div>
                 </div>
-                <TrajectoryBadge value={activePlayer.trajectory} />
-              </div>
-
-              <div className="my-4 grid grid-cols-3 gap-4 text-xs">
-                <div>
-                  <span className="text-[#94A3B8]">Nilai Saat Ini</span>
-                  <p className="mt-0.5 text-lg font-bold text-[#10B981]">
-                    {fmt.eur(activePlayer.current_value_eur)}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-[#94A3B8]">Peak Value</span>
-                  <p className="mt-0.5 text-lg font-bold text-[#F59E0B]">
-                    {fmt.eur(activePlayer.peak_value_eur)}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-[#94A3B8]">Titik Valuasi</span>
-                  <p className="mt-0.5 text-lg font-bold text-[#F1F5F9]">
-                    {activePlayer.history.length}
-                  </p>
+                <div className="shrink-0 self-start sm:self-center">
+                  <TrajectoryBadge value={activePlayer.trajectory} />
                 </div>
               </div>
 
-              {chartOption ? (
-                <EChart option={chartOption} height={320} label={`Tren historis ${activePlayer.name}`} />
-              ) : null}
+              {/* 4-column stat strip */}
+              <Panel surface="raised" padding="none" className="mt-4">
+                <PanelDividerGrid cols={4}>
+                  <Stat
+                    label="Nilai Sekarang"
+                    value={fmt.eur(activePlayer.current_value_eur)}
+                    tone="positive"
+                  />
+                  <Stat
+                    label="Puncak Karier"
+                    value={fmt.eur(activePlayer.peak_value_eur)}
+                    tone="warning"
+                  />
+                  <Stat
+                    label="Usia"
+                    value={activePlayer.age}
+                    unit="thn"
+                    tone="neutral"
+                  />
+                  <Stat
+                    label="Titik Valuasi"
+                    value={activePlayer.history.length}
+                    unit="titik"
+                    tone="neutral"
+                  />
+                </PanelDividerGrid>
+              </Panel>
+
+              {/* Career value line chart */}
+              <div className="mt-5">
+                <SectionHeader as="h3" title="Riwayat Nilai Pasar" />
+                {chartOption ? (
+                  <div className="mt-3">
+                    <EChart
+                      option={chartOption}
+                      height={320}
+                      label={`Grafik riwayat nilai pasar ${activePlayer.name}`}
+                    />
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="Tidak Ada Data Riwayat"
+                    description="Pemain ini belum memiliki catatan riwayat valuasi pasar."
+                    className="mt-3"
+                  />
+                )}
+              </div>
             </>
-          ) : (
-            <p className="text-sm text-[#94A3B8]">Pilih pemain dari daftar di sebelah kiri.</p>
           )}
-        </div>
+        </Panel>
       </div>
     </div>
   );
