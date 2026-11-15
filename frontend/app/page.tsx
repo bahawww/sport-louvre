@@ -35,14 +35,14 @@ const PANELS: Record<TabId, ComponentType<PanelProps>> = {
 };
 
 const TABS = [
-  ["arena", "KPI & Model Arena"],
-  ["diagnostics", "Confusion & Scatter"],
-  ["errors", "Analisis Kesalahan"],
+  ["arena", "Arena"],
+  ["diagnostics", "Diagnostik"],
+  ["errors", "Kesalahan"],
   ["history", "Tren Karir"],
-  ["simulator", "Scouting Simulator"],
-  ["recommendations", "Rekomendasi Klub"],
-  ["datasets", "Dataset Total"],
-  ["penjelasan", "Penjelasan & Workflow"],
+  ["simulator", "Simulator"],
+  ["recommendations", "Rekomendasi"],
+  ["datasets", "Dataset"],
+  ["penjelasan", "Penjelasan"],
 ] as const;
 
 type TabId = (typeof TABS)[number][0];
@@ -80,58 +80,87 @@ export default function DashboardPage() {
   const overview = useApi<OverviewResponse>("/overview");
   const preds = useApi<TestPredictionsResponse>("/test-predictions");
   const ActivePanel = PANELS[tab ?? "arena"];
+  const metaText = overview.data
+    ? `${overview.data.dataset.total_players.toLocaleString("id-ID")} pemain · ${overview.data.dataset.leagues.length} liga`
+    : null;
 
   return (
     <div className="sh-root">
-      {open && <div className="sh-back" onClick={() => setOpen(false)} aria-hidden="true" />}
-
-      <aside aria-label="Menu navigasi" className={open ? "sh-aside open" : "sh-aside"}>
-        <div className="sh-head">
-          <div>
-            <b className="sh-title">Sport Louvre</b>
-            <p className="sh-sub">Transfermarkt 2025/2026</p>
-          </div>
-          <button type="button" onClick={() => setOpen(false)} className="sh-ibtn sh-hide-lg" aria-label="Tutup menu">
-            Tutup
-          </button>
-        </div>
-
-        <nav aria-label="Navigasi utama" className="sh-nav">
-          {TABS.map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => selectTab(id)}
-              aria-current={tab === id ? "page" : undefined}
-              className={tab === id ? "sh-tab on" : "sh-tab"}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="sh-foot">
-          <button type="button" onClick={toggleTheme} className="sh-theme" aria-label="Ganti tema">
-            <span>{isDark ? "Tema Gelap" : "Tema Terang"}</span>
-            <span className="sh-sub">{isDark ? "Ke Terang" : "Ke Gelap"}</span>
-          </button>
-          {overview.data && (
-            <p className="sh-sub">
-              {overview.data.dataset.total_players.toLocaleString("id-ID")} pemain · {overview.data.dataset.leagues.length} liga
-            </p>
-          )}
-        </div>
-      </aside>
-
       <header className="sh-top">
-        <button type="button" onClick={() => setOpen(true)} className="sh-ibtn" aria-label="Buka menu navigasi" aria-expanded={open}>
-          Menu
-        </button>
-        <b className="sh-title">Sport Louvre</b>
-        <button type="button" onClick={toggleTheme} className="sh-ibtn" aria-label="Ganti tema">
-          {isDark ? "Terang" : "Gelap"}
-        </button>
+        <div className="sh-top-in">
+          <div className="sh-brand">
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className="sh-ibtn sh-hide-lg"
+              aria-label="Buka menu navigasi"
+              aria-expanded={open}
+            >
+              Menu
+            </button>
+            <b className="sh-title">Sport Louvre</b>
+            <span className="sh-sub sh-only-lg">2025/26</span>
+          </div>
+
+          <nav aria-label="Navigasi utama" className="sh-nav-top">
+            {TABS.map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => selectTab(id)}
+                aria-current={tab === id ? "page" : undefined}
+                className={tab === id ? "sh-tab on" : "sh-tab"}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="sh-right">
+            {metaText && <span className="sh-sub sh-meta">{metaText}</span>}
+            <button type="button" onClick={toggleTheme} className="sh-ibtn" aria-label="Ganti tema">
+              {isDark ? "Terang" : "Gelap"}
+            </button>
+          </div>
+        </div>
       </header>
+
+      {open && (
+        <>
+          <div className="sh-back" onClick={() => setOpen(false)} aria-hidden="true" />
+          <aside aria-label="Menu navigasi" className="sh-aside open">
+            <div className="sh-head">
+              <div>
+                <b className="sh-title">Sport Louvre</b>
+                <p className="sh-sub">Transfermarkt 2025/2026</p>
+              </div>
+              <button type="button" onClick={() => setOpen(false)} className="sh-ibtn" aria-label="Tutup menu">
+                Tutup
+              </button>
+            </div>
+
+            <nav aria-label="Navigasi mobile" className="sh-nav">
+              {TABS.map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => selectTab(id)}
+                  aria-current={tab === id ? "page" : undefined}
+                  className={tab === id ? "sh-tab on" : "sh-tab"}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
+
+            {metaText && (
+              <div className="sh-foot">
+                <p className="sh-sub">{metaText}</p>
+              </div>
+            )}
+          </aside>
+        </>
+      )}
 
       <main className="sh-main">
         {!tab || overview.isLoading || preds.isLoading ? (
