@@ -236,6 +236,10 @@ input[type="range"] {
   border-color: var(--pill-neutral-bd);
 }
 
+[data-theme="light"] .league-logo-light-fix {
+  filter: invert(0.86) hue-rotate(180deg);
+}
+
 /* App Shell Layout Classes */
 .sh-root {
   min-height: 100dvh;

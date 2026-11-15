@@ -157,6 +157,7 @@ export function LeagueBadge({
   const manifest = useMediaManifest();
   const [failed, setFailed] = useState(false);
   const src = league ? manifest.leagues[league] : undefined;
+  const needsLightFix = league === "Premier League" || league === "Ligue 1";
 
   if (!league) return null;
 
@@ -169,7 +170,7 @@ export function LeagueBadge({
           loading="lazy"
           style={{ width: size + 2, height: size + 2 }}
           onError={() => setFailed(true)}
-          className="shrink-0 object-contain"
+          className={`shrink-0 object-contain${needsLightFix ? " league-logo-light-fix" : ""}`}
         />
       ) : null}
       {showName ? <span className="truncate">{league}</span> : null}
