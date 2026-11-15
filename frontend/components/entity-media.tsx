@@ -46,6 +46,18 @@ export function useMediaManifest(): MediaManifest {
   return useSyncExternalStore(subscribeManifest, getManifestSnapshot, () => EMPTY_MANIFEST);
 }
 
+export function resolveClubName(
+  manifest: MediaManifest,
+  playerId?: string | number,
+  fallbackClub?: string,
+): string {
+  return (
+    (playerId != null ? manifest.playerClubs[String(playerId)] : undefined) ||
+    fallbackClub ||
+    ""
+  );
+}
+
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -112,8 +124,7 @@ export function ClubBadge({
 }) {
   const manifest = useMediaManifest();
   const [stage, setStage] = useState(0); // 0 thumbnail, 1 original, 2 icon
-  const resolvedClub =
-    (playerId != null ? manifest.playerClubs[String(playerId)] : undefined) || club || "";
+  const resolvedClub = resolveClubName(manifest, playerId, club);
   const original = resolvedClub ? manifest.clubs[resolvedClub] : undefined;
   const thumb = original?.startsWith("/media/clubs/") && /\.png$/i.test(original)
     ? original.replace("/media/clubs/", "/media/thumbs/clubs/").replace(/\.png$/i, ".webp")

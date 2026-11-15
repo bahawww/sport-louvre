@@ -2,7 +2,7 @@
 
 import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { ClubBadge, PlayerAvatar } from "@/components/entity-media";
+import { ClubBadge, PlayerAvatar, resolveClubName, useMediaManifest } from "@/components/entity-media";
 
 export interface PlayerCellProps extends HTMLAttributes<HTMLDivElement> {
   playerId?: string | number;
@@ -26,6 +26,9 @@ export function PlayerCell({
   className,
   ...props
 }: PlayerCellProps) {
+  const manifest = useMediaManifest();
+  const displayClub = resolveClubName(manifest, playerId, club);
+
   return (
     <div
       className={cn("flex items-center gap-3 min-w-0 text-left", className)}
@@ -44,19 +47,19 @@ export function PlayerCell({
           </span>
           {badge ? <div className="shrink-0">{badge}</div> : null}
         </div>
-        {club || meta ? (
+        {displayClub || meta ? (
           <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted truncate">
-            {showClubLogo ? (
+            {showClubLogo && displayClub ? (
               <ClubBadge
-                club={club}
+                club={displayClub}
                 playerId={playerId}
                 size={14}
-                showName={!club}
+                showName={false}
                 className="shrink-0 text-muted"
               />
             ) : null}
-            {club ? <span className="truncate">{club}</span> : null}
-            {club && meta ? <span className="text-faint">·</span> : null}
+            {displayClub ? <span className="truncate">{displayClub}</span> : null}
+            {displayClub && meta ? <span className="text-faint">·</span> : null}
             {meta ? <span className="truncate">{meta}</span> : null}
           </div>
         ) : null}

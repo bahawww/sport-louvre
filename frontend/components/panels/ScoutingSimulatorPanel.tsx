@@ -5,7 +5,13 @@ import { AlertTriangle, RotateCcw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { chartTooltipBase, EChart, useChartTheme, type ChartOption } from "@/components/chart";
-import { ClubBadge, LeagueBadge, PlayerAvatar } from "@/components/entity-media";
+import {
+  ClubBadge,
+  LeagueBadge,
+  PlayerAvatar,
+  resolveClubName,
+  useMediaManifest,
+} from "@/components/entity-media";
 import {
   Badge,
   Button,
@@ -68,6 +74,7 @@ const TREND_TONE_MAP: Record<string, MeterTone> = {
 
 export function ScoutingSimulatorPanel() {
   const theme = useChartTheme();
+  const manifest = useMediaManifest();
   const datasets = useApi<DatasetsResponse>("/datasets");
   const [player, setPlayer] = useState<DatasetPlayerRow | null>(null);
   const [scenario, setScenario] = useState<Scenario>({
@@ -120,15 +127,18 @@ export function ScoutingSimulatorPanel() {
     const q = search.trim().toLowerCase();
     if (!q) return list.slice(0, 10);
     return list
-      .filter(
-        (p) =>
+      .filter((p) => {
+        const clubName = resolveClubName(manifest, p.player_id, p.peak_club);
+        return (
           p.name.toLowerCase().includes(q) ||
+          clubName.toLowerCase().includes(q) ||
           p.peak_club.toLowerCase().includes(q) ||
           p.league_name.toLowerCase().includes(q) ||
-          (p.position ?? "").toLowerCase().includes(q),
-      )
+          (p.position ?? "").toLowerCase().includes(q)
+        );
+      })
       .slice(0, 14);
-  }, [datasets.data, search]);
+  }, [datasets.data, search, manifest]);
 
   const data = sim.data;
   const outlook = data?.outlook_12m ?? null;
@@ -348,7 +358,7 @@ export function ScoutingSimulatorPanel() {
                               {p.name}
                             </span>
                             <span className="block truncate text-[11px] text-muted">
-                              {p.peak_club} · {p.position ?? "-"}
+                              {resolveClubName(manifest, p.player_id, p.peak_club)} · {p.position ?? "-"}
                             </span>
                           </div>
                         </div>

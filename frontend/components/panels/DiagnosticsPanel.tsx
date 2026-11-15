@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { chartTooltipBase, EChart, useChartTheme } from "@/components/chart";
-import { LeagueBadge } from "@/components/entity-media";
+import { LeagueBadge, resolveClubName, useMediaManifest } from "@/components/entity-media";
 import {
   Badge,
   DataTable,
@@ -122,6 +122,7 @@ export function DiagnosticsPanel({
     (oot?.classification[name] as unknown as { trend?: Record<string, number> } | undefined)?.trend;
 
   const theme = useChartTheme();
+  const manifest = useMediaManifest();
 
   const scatterOption = useMemo(() => {
     const rows = preds.rows;
@@ -183,24 +184,31 @@ export function DiagnosticsPanel({
                   ? theme.chart4
                   : theme.chart2,
           },
-          data: rows.map((r) => [r.actual_value_eur, predOf(r), r.name, r.peak_club]),
+          data: rows.map((r) => [
+            r.actual_value_eur,
+            predOf(r),
+            r.name,
+            resolveClubName(manifest, r.player_id, r.peak_club),
+          ]),
         },
       ],
     };
-  }, [preds, valueModel, theme]);
+  }, [preds, valueModel, theme, manifest]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return preds.rows.filter((r) => {
       if (statusFilter !== "ALL" && r.valuation_status !== statusFilter) return false;
       if (!q) return true;
+      const clubName = resolveClubName(manifest, r.player_id, r.peak_club);
       return (
         r.name.toLowerCase().includes(q) ||
+        clubName.toLowerCase().includes(q) ||
         r.peak_club.toLowerCase().includes(q) ||
         r.league_name.toLowerCase().includes(q)
       );
     });
-  }, [preds, search, statusFilter]);
+  }, [preds, search, statusFilter, manifest]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, Math.max(0, totalPages - 1));

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Download } from "lucide-react";
 
-import { LeagueBadge } from "@/components/entity-media";
+import { LeagueBadge, resolveClubName, useMediaManifest } from "@/components/entity-media";
 import { TrajectoryBadge } from "@/components/trajectory-badge";
 import {
   Badge,
@@ -31,6 +31,7 @@ function formatBytes(bytes: number): string {
 const PAGE_SIZE = 50; // rendering all 2,418 rows at once made the tab lag
 
 export function DatasetPanel() {
+  const manifest = useMediaManifest();
   const res = useApi<DatasetsResponse>("/datasets");
   const [search, setSearch] = useState("");
   const [league, setLeague] = useState("ALL");
@@ -42,13 +43,15 @@ export function DatasetPanel() {
     return res.data.players.filter((p) => {
       if (league !== "ALL" && p.league_name !== league) return false;
       if (!q) return true;
+      const clubName = resolveClubName(manifest, p.player_id, p.peak_club);
       return (
         p.name.toLowerCase().includes(q) ||
+        clubName.toLowerCase().includes(q) ||
         p.peak_club.toLowerCase().includes(q) ||
         p.nationality.toLowerCase().includes(q)
       );
     });
-  }, [res.data, search, league]);
+  }, [res.data, search, league, manifest]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, Math.max(0, totalPages - 1));
