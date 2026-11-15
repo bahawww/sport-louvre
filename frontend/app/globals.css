@@ -9,6 +9,7 @@
   --surface: #121316;
   --raised: #1a1c20;
   --active: #22252a;
+  --nav-bg: rgba(12, 13, 16, 0.78);
 
   /* Borders */
   --border: #262930;
@@ -87,6 +88,7 @@
   --surface: #ffffff;
   --raised: #f0f2f5;
   --active: #e6e9ef;
+  --nav-bg: rgba(255, 255, 255, 0.80);
 
   /* Borders */
   --border: #e2e5ea;
@@ -239,7 +241,7 @@ input[type="range"] {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-ground);
+  background-color: var(--ground);
   color: var(--text);
 }
 .sh-top {
@@ -247,7 +249,9 @@ input[type="range"] {
   top: 0;
   z-index: 30;
   border-bottom: 1px solid var(--border);
-  background-color: var(--bg-surface);
+  background-color: var(--nav-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  backdrop-filter: saturate(180%) blur(14px);
 }
 .sh-top-in {
   max-width: 1440px;
@@ -281,7 +285,7 @@ input[type="range"] {
   display: none;
   flex-direction: column;
   border-right: 1px solid var(--border);
-  background-color: var(--bg-surface);
+  background-color: var(--surface);
 }
 .sh-aside.open {
   position: fixed;
@@ -297,7 +301,7 @@ input[type="range"] {
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.875rem 1.25rem;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--rule);
 }
 .sh-title {
   display: block;
@@ -310,7 +314,7 @@ input[type="range"] {
 }
 .sh-sub {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--muted);
   line-height: 1.3;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -332,22 +336,22 @@ input[type="range"] {
   padding: 0 0.75rem;
   font-size: 13px;
   text-align: left;
-  color: var(--text-muted);
+  color: var(--muted);
   border: 1px solid transparent;
   white-space: nowrap;
 }
 .sh-tab:hover {
   color: var(--text);
-  background-color: var(--bg-raised);
+  background-color: var(--raised);
 }
 .sh-tab.on {
-  background-color: var(--bg-active);
+  background-color: var(--active);
   color: var(--text);
   font-weight: 600;
   border-color: var(--border);
 }
 .sh-foot {
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--rule);
   padding: 0.75rem 1.25rem;
 }
 .sh-ibtn {
@@ -359,7 +363,7 @@ input[type="range"] {
   justify-content: center;
   border-radius: var(--radius-control);
   border: 1px solid var(--border);
-  background-color: var(--bg-raised);
+  background-color: var(--raised);
   font-size: 12px;
   font-weight: 500;
   color: var(--text);
@@ -376,23 +380,23 @@ input[type="range"] {
   height: 320px;
   border-radius: var(--radius-panel);
   border: 1px solid var(--border);
-  background-color: var(--bg-surface);
+  background-color: var(--surface);
 }
 .sh-err {
   border-radius: var(--radius-panel);
-  border: 1px solid var(--danger-border);
-  background-color: var(--bg-surface);
+  border: 1px solid var(--pill-crimson-bd);
+  background-color: var(--surface);
   padding: 1.25rem;
   font-size: 13px;
-  color: var(--danger);
+  color: var(--negative);
 }
 .sh-retry {
   margin-left: 0.75rem;
   min-height: 44px;
   padding: 0 0.875rem;
   border-radius: var(--radius-control);
-  border: 1px solid var(--border-strong);
-  background-color: var(--bg-raised);
+  border: 1px solid var(--control);
+  background-color: var(--raised);
   color: var(--text);
   font-size: 12px;
 }
