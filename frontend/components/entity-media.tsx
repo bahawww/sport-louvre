@@ -83,7 +83,9 @@ export function PlayerAvatar({
   const thumb = original?.startsWith("/media/players/")
     ? original.replace("/media/players/", "/media/thumbs/players/").replace(/\.png$/i, ".webp")
     : undefined;
-  const src = stage === 0 && thumb ? thumb : original;
+  const rawSrc = stage === 0 && thumb ? thumb : original;
+  // Bust 24h edge/browser cache on /media/players/* after portrait regeneration.
+  const src = rawSrc ? `${rawSrc}${rawSrc.includes("?") ? "&" : "?"}v=2` : undefined;
   const failed = stage >= 2;
 
   return (
@@ -129,7 +131,9 @@ export function ClubBadge({
   const thumb = original?.startsWith("/media/clubs/") && /\.png$/i.test(original)
     ? original.replace("/media/clubs/", "/media/thumbs/clubs/").replace(/\.png$/i, ".webp")
     : undefined;
-  const src = stage === 0 && thumb ? thumb : original;
+  const rawSrc = stage === 0 && thumb ? thumb : original;
+  // Bust 24h edge/browser cache on /media/players/* after portrait regeneration.
+  const src = rawSrc ? `${rawSrc}${rawSrc.includes("?") ? "&" : "?"}v=2` : undefined;
   const failed = stage >= 2;
 
   if (!resolvedClub) return null;
