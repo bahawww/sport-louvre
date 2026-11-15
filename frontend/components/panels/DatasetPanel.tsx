@@ -14,10 +14,13 @@ function formatBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
+const PAGE_SIZE = 50; // rendering all 2,418 rows at once made the tab lag
+
 export function DatasetPanel() {
   const res = useApi<DatasetsResponse>("/datasets");
   const [search, setSearch] = useState("");
   const [league, setLeague] = useState("ALL");
+  const [page, setPage] = useState(0);
 
   const filtered = useMemo(() => {
     if (!res.data) return [];
@@ -32,6 +35,8 @@ export function DatasetPanel() {
       );
     });
   }, [res.data, search, league]);
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageRows = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   if (res.isLoading) {
     return (
@@ -95,13 +100,19 @@ export function DatasetPanel() {
           <div className="flex flex-wrap gap-2">
             <input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(0);
+              }}
               placeholder="Cari nama, klub, atau negara..."
               className="w-56 rounded-lg border border-[#243244] bg-[#0B1117] px-3 py-1.5 text-xs text-[#F1F5F9] placeholder-[#64748B]"
             />
             <select
               value={league}
-              onChange={(e) => setLeague(e.target.value)}
+              onChange={(e) => {
+                setLeague(e.target.value);
+                setPage(0);
+              }}
               className="rounded-lg border border-[#243244] bg-[#0B1117] px-3 py-1.5 text-xs text-[#F1F5F9]"
             >
               <option value="ALL">Semua Liga</option>
@@ -129,7 +140,9 @@ export function DatasetPanel() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1E293B]">
-              {filtered.map((p, idx) => (
+              {pageRows.map((p, i) => {
+                const idx = page * PAGE_SIZE + i;
+                return (
                 <tr key={p.player_id} className="hover:bg-[#182230]/60">
                   <td className="py-2 pr-3 text-[#64748B]">{idx + 1}</td>
                   <td className="py-2 pr-3">
@@ -159,9 +172,38 @@ export function DatasetPanel() {
                   </td>
                   <td className="py-2 pl-3 text-right text-[#94A3B8]">{p.num_valuation_points}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-[#94A3B8]">
+          <span>
+            {filtered.length === 0
+              ? "Tidak ada pemain yang cocok."
+              : `Menampilkan ${page * PAGE_SIZE + 1} sampai ${Math.min(filtered.length, (page + 1) * PAGE_SIZE)} dari ${filtered.length} pemain`}
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((x) => Math.max(0, x - 1))}
+              disabled={page === 0}
+              className="rounded-lg border border-[#243244] px-3 py-1.5 font-medium text-[#F1F5F9] hover:border-[#94A3B8] disabled:opacity-40"
+            >
+              Sebelumnya
+            </button>
+            <span className="tabular-nums">
+              Halaman {page + 1} dari {pages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((x) => Math.min(pages - 1, x + 1))}
+              disabled={page >= pages - 1}
+              className="rounded-lg border border-[#243244] px-3 py-1.5 font-medium text-[#F1F5F9] hover:border-[#94A3B8] disabled:opacity-40"
+            >
+              Berikutnya
+            </button>
+          </span>
         </div>
       </div>
     </div>

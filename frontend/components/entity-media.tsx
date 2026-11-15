@@ -51,8 +51,14 @@ export function PlayerAvatar({
   className?: string;
 }) {
   const manifest = useMediaManifest();
-  const [failed, setFailed] = useState(false);
-  const src = playerId != null ? manifest.players[String(playerId)] : undefined;
+  // 0 = try the small WebP thumbnail, 1 = fall back to the original PNG, 2 = show initials.
+  const [stage, setStage] = useState(0);
+  const original = playerId != null ? manifest.players[String(playerId)] : undefined;
+  const thumb = original?.startsWith("/media/players/")
+    ? original.replace("/media/players/", "/media/thumbs/players/").replace(/\.png$/i, ".webp")
+    : undefined;
+  const src = stage === 0 && thumb ? thumb : original;
+  const failed = stage >= 2;
 
   return (
     <span
@@ -64,7 +70,10 @@ export function PlayerAvatar({
           src={src}
           alt={name}
           loading="lazy"
-          onError={() => setFailed(true)}
+          decoding="async"
+          width={size}
+          height={size}
+          onError={() => setStage((s) => (s === 0 && thumb ? 1 : 2))}
           className="h-full w-full object-contain object-bottom px-[2px] pt-[3px] drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]"
         />
       ) : (
@@ -88,10 +97,15 @@ export function ClubBadge({
   className?: string;
 }) {
   const manifest = useMediaManifest();
-  const [failed, setFailed] = useState(false);
+  const [stage, setStage] = useState(0); // 0 thumbnail, 1 original, 2 icon
   const resolvedClub =
     (playerId != null ? manifest.playerClubs[String(playerId)] : undefined) || club || "";
-  const src = resolvedClub ? manifest.clubs[resolvedClub] : undefined;
+  const original = resolvedClub ? manifest.clubs[resolvedClub] : undefined;
+  const thumb = original?.startsWith("/media/clubs/") && /\.png$/i.test(original)
+    ? original.replace("/media/clubs/", "/media/thumbs/clubs/").replace(/\.png$/i, ".webp")
+    : undefined;
+  const src = stage === 0 && thumb ? thumb : original;
+  const failed = stage >= 2;
 
   if (!resolvedClub) return null;
 
@@ -103,7 +117,8 @@ export function ClubBadge({
           alt={resolvedClub}
           loading="lazy"
           style={{ width: size + 2, height: size + 2 }}
-          onError={() => setFailed(true)}
+          decoding="async"
+          onError={() => setStage((x) => (x === 0 && thumb ? 1 : 2))}
           className="shrink-0 object-contain drop-shadow-[0_0_1.5px_rgba(255,255,255,0.35)]"
         />
       ) : (

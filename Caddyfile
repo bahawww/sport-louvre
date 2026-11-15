@@ -12,6 +12,10 @@
 		-Server
 	}
 
+	# Portraits and crests keep their file name when replaced, so cache for a day, not forever.
+	@media path /media/*
+	header @media >Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
+
 	handle /api/* {
 		reverse_proxy api:8000
 	}

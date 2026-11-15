@@ -54,6 +54,8 @@ export function ScoutingSimulatorPanel() {
     shockPct: 0,
     league: "Premier League",
   });
+  // Sliders move a local draft; the request goes out once, when the slider is released.
+  const [draft, setDraft] = useState({ horizonMonths: DEFAULT_HORIZON_MONTHS, shockPct: 0 });
   const [search, setSearch] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -69,6 +71,7 @@ export function ScoutingSimulatorPanel() {
   const selectPlayer = (p: DatasetPlayerRow) => {
     setPlayer(p);
     setScenario({ horizonMonths: DEFAULT_HORIZON_MONTHS, shockPct: 0, league: p.league_name });
+    setDraft({ horizonMonths: DEFAULT_HORIZON_MONTHS, shockPct: 0 });
     setPickerOpen(false);
     setSearch("");
   };
@@ -81,10 +84,15 @@ export function ScoutingSimulatorPanel() {
 
   useEffect(() => {
     if (!player) return;
-    const t = setTimeout(() => sim.mutate(buildPayload(player, scenario)), 250);
+    const t = setTimeout(() => sim.mutate(buildPayload(player, scenario)), 120);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player, scenario]);
+
+  const commitDraft = () =>
+    setScenario((s) =>
+      s.horizonMonths === draft.horizonMonths && s.shockPct === draft.shockPct ? s : { ...s, ...draft },
+    );
 
   const matches = useMemo(() => {
     const list = datasets.data?.players ?? [];
@@ -404,14 +412,11 @@ export function ScoutingSimulatorPanel() {
               <button
                 type="button"
                 disabled={!scenarioActive}
-                onClick={() =>
-                  player &&
-                  setScenario({
-                    horizonMonths: DEFAULT_HORIZON_MONTHS,
-                    shockPct: 0,
-                    league: player.league_name,
-                  })
-                }
+                onClick={() => {
+                  if (!player) return;
+                  setScenario({ horizonMonths: DEFAULT_HORIZON_MONTHS, shockPct: 0, league: player.league_name });
+                  setDraft({ horizonMonths: DEFAULT_HORIZON_MONTHS, shockPct: 0 });
+                }}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-[#243244] bg-[#0B1117] px-2.5 py-1.5 text-[11px] font-semibold text-[#94A3B8] hover:text-[#F1F5F9] disabled:opacity-40"
               >
                 <RotateCcw className="size-3" />
@@ -423,9 +428,7 @@ export function ScoutingSimulatorPanel() {
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-[#94A3B8]">Valuasi hipotetis 6 bulan lagi</span>
                 <span className="font-bold text-[#F59E0B]">
-                  {scenario.shockPct === 0
-                    ? "tidak ada"
-                    : `${scenario.shockPct > 0 ? "+" : ""}${scenario.shockPct}%`}
+                  {draft.shockPct === 0 ? "tidak ada" : `${draft.shockPct > 0 ? "+" : ""}${draft.shockPct}%`}
                 </span>
               </div>
               <input
@@ -433,8 +436,11 @@ export function ScoutingSimulatorPanel() {
                 min={-60}
                 max={100}
                 step={5}
-                value={scenario.shockPct}
-                onChange={(e) => setScenario((s) => ({ ...s, shockPct: Number(e.target.value) }))}
+                value={draft.shockPct}
+                onChange={(e) => setDraft((d) => ({ ...d, shockPct: Number(e.target.value) }))}
+                onPointerUp={commitDraft}
+                onKeyUp={commitDraft}
+                onBlur={commitDraft}
                 className="mt-2 w-full accent-[#F59E0B]"
               />
               <p className="mt-1 text-[10px] text-[#64748B]">
@@ -445,17 +451,18 @@ export function ScoutingSimulatorPanel() {
             <div className="mt-4">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-[#94A3B8]">Jarak ke update berikutnya</span>
-                <span className="font-bold text-[#F1F5F9]">{scenario.horizonMonths} bulan</span>
+                <span className="font-bold text-[#F1F5F9]">{draft.horizonMonths} bulan</span>
               </div>
               <input
                 type="range"
                 min={2}
                 max={18}
                 step={1}
-                value={scenario.horizonMonths}
-                onChange={(e) =>
-                  setScenario((s) => ({ ...s, horizonMonths: Number(e.target.value) }))
-                }
+                value={draft.horizonMonths}
+                onChange={(e) => setDraft((d) => ({ ...d, horizonMonths: Number(e.target.value) }))}
+                onPointerUp={commitDraft}
+                onKeyUp={commitDraft}
+                onBlur={commitDraft}
                 className="mt-2 w-full accent-[#10B981]"
               />
             </div>

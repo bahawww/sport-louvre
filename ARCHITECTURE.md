@@ -117,6 +117,13 @@ model is right 96.9% of the time. At confidence >= 0.7 (43% of players) accuracy
 `build_artifacts()` trains in about 5 minutes and caches the result in the `model_cache` volume,
 keyed by a hash of the data files and pipeline code. With a matching cache the API starts in seconds.
 
+### Serving cost
+- `/api/overview`, `/api/test-predictions` and `/api/datasets` are serialized once per model load
+  and sent with `Cache-Control: max-age=300`.
+- `/api/simulate` runs inference on one thread (a one-row prediction fanned out over 16 cores was
+  slower, 0.7 s vs 0.15 s, and pinned the CPU), at most two requests at a time, with an LRU cache
+  of 1,024 answers.
+
 ### Known limits
 - No performance data: "fair value" comes from price history, age, position and league only.
   The gap to the market price correlates about -0.70 with the price move of the hidden 12 months,
@@ -154,6 +161,8 @@ deploy/test.sh             # backend tests inside the API image
 deploy/pretrain.sh         # train into the model_cache volume (skip ~5 min of startup training)
 docker compose up -d
 ```
+- After adding or replacing portraits or crests: `cd frontend && node scripts/build-thumbs.mjs`
+  (WebP thumbnails in `public/media/thumbs/`; the UI falls back to the original if one is missing).
 - Publish DNS & tunnel: `./deploy/cloudflare-publish.sh` (idempotent).
 - After changing `features.py`, `ml_pipeline.py` or the data, the cache key changes: run
   `deploy/pretrain.sh` before `up -d`, or the API trains at startup (healthcheck allows 10 min).

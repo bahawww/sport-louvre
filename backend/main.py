@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import json
+import threading
+from collections import OrderedDict
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import FileResponse, Response
+from threadpoolctl import threadpool_limits
 from pydantic import BaseModel, Field, model_validator
 
 from features import CAT_FEATURES, DEFAULT_HORIZON_YR
@@ -113,6 +118,37 @@ class SimulateRequest(BaseModel):
         return self
 
 
+# --- serving cost ---------------------------------------------------------------------
+# The big GET payloads only change when the models are retrained, so they are serialized once.
+# Predictions for one player are tiny inputs: letting scikit-learn fan each one out over every
+# core made a request slower (0.7 s vs 0.15 s) and pinned the whole CPU, so inference runs on
+# one thread, at most two requests at a time, and identical requests are answered from a cache.
+_STATIC_JSON: dict[tuple[int, str], bytes] = {}
+_SIM_CACHE: "OrderedDict[tuple, dict[str, Any]]" = OrderedDict()
+_SIM_CACHE_MAX = 1024
+_SIM_LOCK = threading.Lock()
+_SIM_SLOTS = threading.BoundedSemaphore(2)
+CACHE_HEADERS = {"Cache-Control": "public, max-age=300"}
+BASELINE_FIELDS = (
+    "predicted_trajectory",
+    "trajectory_probabilities",
+    "predicted_trend",
+    "trend_probabilities",
+    "predicted_value_eur",
+    "value_range_eur",
+    "fair_value_eur",
+    "fair_value_range_eur",
+)
+
+
+def _static_json(key: str, build: Callable[[], Any]) -> Response:
+    art = _get_artifacts()
+    cache_key = (id(art), key)
+    if cache_key not in _STATIC_JSON:
+        _STATIC_JSON[cache_key] = json.dumps(jsonable_encoder(build()), separators=(",", ":")).encode()
+    return Response(content=_STATIC_JSON[cache_key], media_type="application/json", headers=CACHE_HEADERS)
+
+
 def _get_artifacts() -> DashboardArtifacts:
     if artifacts is None:
         raise RuntimeError("ML artifacts not initialized")
@@ -151,13 +187,13 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/api/overview")
-def overview() -> dict[str, Any]:
-    return _get_artifacts().overview
+def overview() -> Response:
+    return _static_json("overview", lambda: _get_artifacts().overview)
 
 
 @app.get("/api/test-predictions")
-def test_predictions() -> dict[str, Any]:
-    return _get_artifacts().test_predictions
+def test_predictions() -> Response:
+    return _static_json("test-predictions", lambda: _get_artifacts().test_predictions)
 
 
 @app.get("/api/history")
@@ -321,8 +357,13 @@ def _simulate_player(art: DashboardArtifacts, req: SimulateRequest) -> dict[str,
                 ),
             }
     if not sc.backtest and (appended or league or sc.horizon_years is not None):
-        base_row, _ = player_feature_row(art, pid)
-        base = predict_feature_row(art, base_row)
+        # The page loads the plain player first, so its prediction is normally cached already.
+        plain = _SIM_CACHE.get((id(art), SimulateRequest(player_id=pid).model_dump_json()))
+        if plain is not None:
+            base = {k: plain[k] for k in BASELINE_FIELDS}
+        else:
+            base_row, _ = player_feature_row(art, pid)
+            base = predict_feature_row(art, base_row)
         out["baseline"] = {**base, "horizon_years": DEFAULT_HORIZON_YR}
         out["scenario_delta_eur"] = round(out["predicted_value_eur"] - base["predicted_value_eur"], 2)
     out["scouting_verdict"] = _scouting_verdict(
@@ -367,9 +408,19 @@ def _simulate_profile(art: DashboardArtifacts, req: SimulateRequest) -> dict[str
 @app.post("/api/simulate")
 def simulate(req: SimulateRequest) -> dict[str, Any]:
     art = _get_artifacts()
-    if req.player_id is not None:
-        return _simulate_player(art, req)
-    return _simulate_profile(art, req)
+    key = (id(art), req.model_dump_json())
+    with _SIM_LOCK:
+        hit = _SIM_CACHE.get(key)
+        if hit is not None:
+            _SIM_CACHE.move_to_end(key)
+            return hit
+    with _SIM_SLOTS, threadpool_limits(limits=1):
+        out = _simulate_player(art, req) if req.player_id is not None else _simulate_profile(art, req)
+    with _SIM_LOCK:
+        _SIM_CACHE[key] = out
+        while len(_SIM_CACHE) > _SIM_CACHE_MAX:
+            _SIM_CACHE.popitem(last=False)
+    return out
 
 
 DATASET_CATALOG: dict[str, dict[str, Any]] = {
@@ -401,7 +452,11 @@ DATASET_CATALOG: dict[str, dict[str, Any]] = {
 
 
 @app.get("/api/datasets")
-def list_datasets() -> dict[str, Any]:
+def list_datasets() -> Response:
+    return _static_json("datasets", _build_datasets)
+
+
+def _build_datasets() -> dict[str, Any]:
     art = _get_artifacts()
     data_dir = resolve_data_dir()
     files: list[dict[str, Any]] = []

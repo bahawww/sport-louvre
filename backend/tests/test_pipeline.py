@@ -680,3 +680,35 @@ def test_simulate_returns_the_price_path_for_charts(client, art):
     assert s.dates[-1] < hyp["hypothetical"][0]["date"] < hyp["forecast_date"]
     back = client.post("/api/simulate", json={"player_id": pid, "scenario": {"backtest": True}}).json()["player"]
     assert len(back["history"]) == len(s.values) - 1  # the predicted valuation is not shown as history
+
+
+# ----------------------------------------------------------------------------- serving cost
+
+
+def test_big_payloads_are_serialized_once_and_cacheable(client):
+    import main
+
+    for path in ("/api/overview", "/api/test-predictions", "/api/datasets"):
+        first = client.get(path)
+        second = client.get(path)
+        assert first.status_code == 200 and first.content == second.content
+        assert "max-age" in first.headers["cache-control"]
+    keys = {k[1] for k in main._STATIC_JSON}
+    assert {"overview", "test-predictions", "datasets"} <= keys
+
+
+def test_simulate_answers_repeats_from_cache_and_stays_single_threaded(client, art, monkeypatch):
+    import main
+
+    pid = art.test_predictions["rows"][1]["player_id"]
+    body = {"player_id": pid, "scenario": {"horizon_years": 0.9}}
+    calls = []
+    real = main._simulate_player
+    monkeypatch.setattr(main, "_simulate_player", lambda a, r: calls.append(1) or real(a, r))
+    main._SIM_CACHE.clear()
+    first = client.post("/api/simulate", json=body).json()
+    second = client.post("/api/simulate", json=body).json()
+    assert first == second and len(calls) == 1
+    other = client.post("/api/simulate", json={"player_id": pid, "scenario": {"horizon_years": 1.0}}).json()
+    assert len(calls) == 2 and other["horizon_years"] != first["horizon_years"]
+    assert len(main._SIM_CACHE) <= main._SIM_CACHE_MAX

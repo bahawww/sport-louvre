@@ -1,17 +1,32 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState } from "react";
 
 import { LogoMark } from "@/components/logo-mark";
-import { ArenaPanel } from "@/components/panels/ArenaPanel";
-import { DatasetPanel } from "@/components/panels/DatasetPanel";
-import { DiagnosticsPanel } from "@/components/panels/DiagnosticsPanel";
-import { ErrorAnalysisPanel } from "@/components/panels/ErrorAnalysisPanel";
-import { PenjelasanPanel } from "@/components/panels/PenjelasanPanel";
-import { RecommendationsPanel } from "@/components/panels/RecommendationsPanel";
-import { ScoutingSimulatorPanel } from "@/components/panels/ScoutingSimulatorPanel";
-import { TrajectoryExplorerPanel } from "@/components/panels/TrajectoryExplorerPanel";
 import { useApi, type OverviewResponse, type TestPredictionsResponse } from "@/lib/api";
+
+// Each tab is its own chunk: the first paint does not pay for ECharts or for tabs never opened.
+const loading = () => (
+  <div className="rounded-xl border border-[#243244] bg-[#121A24] p-8 text-center text-sm text-[#94A3B8]">Memuat...</div>
+);
+const ArenaPanel = dynamic(() => import("@/components/panels/ArenaPanel").then((m) => m.ArenaPanel), { loading });
+const DiagnosticsPanel = dynamic(() => import("@/components/panels/DiagnosticsPanel").then((m) => m.DiagnosticsPanel), { loading });
+const ErrorAnalysisPanel = dynamic(() => import("@/components/panels/ErrorAnalysisPanel").then((m) => m.ErrorAnalysisPanel), { loading });
+const TrajectoryExplorerPanel = dynamic(
+  () => import("@/components/panels/TrajectoryExplorerPanel").then((m) => m.TrajectoryExplorerPanel),
+  { loading },
+);
+const ScoutingSimulatorPanel = dynamic(
+  () => import("@/components/panels/ScoutingSimulatorPanel").then((m) => m.ScoutingSimulatorPanel),
+  { loading },
+);
+const RecommendationsPanel = dynamic(
+  () => import("@/components/panels/RecommendationsPanel").then((m) => m.RecommendationsPanel),
+  { loading },
+);
+const DatasetPanel = dynamic(() => import("@/components/panels/DatasetPanel").then((m) => m.DatasetPanel), { loading });
+const PenjelasanPanel = dynamic(() => import("@/components/panels/PenjelasanPanel").then((m) => m.PenjelasanPanel), { loading });
 
 const TABS = [
   { id: "arena", label: "KPI & Model Arena" },
