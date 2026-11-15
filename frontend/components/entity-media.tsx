@@ -1,8 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 export interface MediaManifest {
   leagues: Record<string, string>;
@@ -18,18 +17,33 @@ const EMPTY_MANIFEST: MediaManifest = {
   playerClubs: {},
 };
 
+let cachedManifest: MediaManifest = EMPTY_MANIFEST;
+let fetchStarted = false;
+const listeners = new Set<() => void>();
+
+function subscribeManifest(listener: () => void) {
+  listeners.add(listener);
+  if (!fetchStarted && typeof window !== "undefined") {
+    fetchStarted = true;
+    fetch("/media/manifest.json")
+      .then((res) => (res.ok ? (res.json() as Promise<MediaManifest>) : EMPTY_MANIFEST))
+      .then((data) => {
+        cachedManifest = data;
+        listeners.forEach((l) => l());
+      })
+      .catch(() => {});
+  }
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function getManifestSnapshot(): MediaManifest {
+  return cachedManifest;
+}
+
 export function useMediaManifest(): MediaManifest {
-  const { data } = useQuery<MediaManifest>({
-    queryKey: ["media-manifest"],
-    queryFn: async () => {
-      const res = await fetch("/media/manifest.json");
-      if (!res.ok) return EMPTY_MANIFEST;
-      return (await res.json()) as MediaManifest;
-    },
-    staleTime: Infinity,
-    gcTime: Infinity,
-  });
-  return data ?? EMPTY_MANIFEST;
+  return useSyncExternalStore(subscribeManifest, getManifestSnapshot, () => EMPTY_MANIFEST);
 }
 
 function getInitials(name: string): string {

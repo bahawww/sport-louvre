@@ -9,6 +9,7 @@ import {
   DataTable,
   type DataTableColumn,
   PageHeader,
+  Pagination,
   Panel,
   PlayerCell,
   SectionHeader,
@@ -67,6 +68,8 @@ const VALUE_MODEL_OPTIONS = [
   { value: "fundamental", label: "Fundamental" },
 ] as const;
 
+const PAGE_SIZE = 50;
+
 export function DiagnosticsPanel({
   overview,
   preds,
@@ -85,6 +88,7 @@ export function DiagnosticsPanel({
   );
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [page, setPage] = useState(0);
   const [valueModel, setValueModel] = useState<"forecast" | "fundamental">("forecast");
   const tasks = overview.regression.tasks;
   const activeTask = tasks?.[valueModel];
@@ -198,6 +202,13 @@ export function DiagnosticsPanel({
     });
   }, [preds, search, statusFilter]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, Math.max(0, totalPages - 1));
+  const pageRows = useMemo(
+    () => filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE),
+    [filtered, safePage],
+  );
+
   const validationRows = useMemo<ValidationRow[]>(() => {
     if (!tasks || !holdoutClf) return [];
     const list: ValidationRow[] = [
@@ -249,136 +260,142 @@ export function DiagnosticsPanel({
     return list;
   }, [tasks, holdoutClf, trend, cvClf, cvTrend, cvTrendBase, oot, ootClf, cleanBlock.best_model]);
 
-  const validationColumns: DataTableColumn<ValidationRow>[] = [
-    {
-      key: "skema",
-      header: "Skema",
-      align: "left",
-      cell: (r) => <span className="font-semibold text-ink">{r.skema}</span>,
-    },
-    {
-      key: "accuracyTrend",
-      header: "Akurasi Tren (4 kelas)",
-      align: "right",
-      cell: (r) => <span className="font-bold text-positive">{r.accuracyTrend}</span>,
-    },
-    {
-      key: "baseline",
-      header: "Baseline tanpa model",
-      align: "right",
-      cell: (r) => <span className="text-muted">{r.baseline}</span>,
-    },
-    {
-      key: "macroF1",
-      header: "Macro-F1",
-      align: "right",
-      cell: (r) => <span className="text-ink">{r.macroF1}</span>,
-    },
-    {
-      key: "detail5Class",
-      header: "Rincian 5 kelas",
-      align: "right",
-      cell: (r) => <span className="text-muted">{r.detail5Class}</span>,
-    },
-    {
-      key: "forecastR2",
-      header: "Forecast R² log",
-      align: "right",
-      cell: (r) => <span className="text-ink">{r.forecastR2}</span>,
-    },
-    {
-      key: "fundamentalR2",
-      header: "Fundamental R² log",
-      align: "right",
-      cell: (r) => <span className="text-ink">{r.fundamentalR2}</span>,
-    },
-  ];
-
-  const testTableColumns: DataTableColumn<TestPredictionRow>[] = [
-    {
-      key: "player",
-      header: "Pemain",
-      align: "left",
-      cell: (r) => (
-        <PlayerCell
-          playerId={r.player_id}
-          name={r.name}
-          club={r.peak_club}
-          meta={`${r.age} thn`}
-          avatarSize={28}
-          showClubLogo={true}
-        />
-      ),
-    },
-    {
-      key: "league",
-      header: "Liga",
-      align: "left",
-      cell: (r) => <LeagueBadge league={r.league_name} size={14} className="text-muted" />,
-    },
-    {
-      key: "actual_trend",
-      header: "Tren Aktual",
-      align: "left",
-      cell: (r) => (
-        <TrendBadge trend={r.actual_trend} fallback={r.actual_trajectory} />
-      ),
-    },
-    {
-      key: "pred_trend",
-      header: "Tren Prediksi",
-      align: "left",
-      cell: (r) => (
-        <TrendBadge
-          trend={r.pred_trend}
-          fallback={r.pred_trajectory_clean}
-          wrong={Boolean(r.pred_trend && r.pred_trend !== r.actual_trend)}
-        />
-      ),
-    },
-    {
-      key: "actual_value",
-      header: "Nilai Aktual",
-      align: "right",
-      cell: (r) => <span className="font-semibold text-ink">{fmt.eur(r.actual_value_eur)}</span>,
-    },
-    {
-      key: "forecast",
-      header: "Forecast",
-      align: "right",
-      cell: (r) => (
-        <span className="text-muted">
-          {r.forecast_value_eur !== undefined ? fmt.eur(r.forecast_value_eur) : "-"}
-        </span>
-      ),
-    },
-    {
-      key: "fair_value",
-      header: "Nilai Wajar",
-      align: "right",
-      cell: (r) => <span className="text-muted">{fmt.eur(r.pred_value_eur)}</span>,
-    },
-    {
-      key: "residual",
-      header: "Gap Wajar",
-      align: "right",
-      cell: (r) => {
-        const isPositive = r.residual_eur > 0;
-        const isNegative = r.residual_eur < 0;
-        return (
-          <span
-            className={cn(
-              "font-semibold tabular-nums",
-              isPositive ? "text-positive" : isNegative ? "text-negative" : "text-muted",
-            )}
-          >
-            {isPositive ? "+" : ""}
-            {fmt.eur(r.residual_eur)}
-          </span>
-        );
+  const validationColumns = useMemo<DataTableColumn<ValidationRow>[]>(
+    () => [
+      {
+        key: "skema",
+        header: "Skema",
+        align: "left",
+        cell: (r) => <span className="font-semibold text-ink">{r.skema}</span>,
       },
-    },
-  ];
+      {
+        key: "accuracyTrend",
+        header: "Akurasi Tren (4 kelas)",
+        align: "right",
+        cell: (r) => <span className="font-bold text-positive">{r.accuracyTrend}</span>,
+      },
+      {
+        key: "baseline",
+        header: "Baseline tanpa model",
+        align: "right",
+        cell: (r) => <span className="text-muted">{r.baseline}</span>,
+      },
+      {
+        key: "macroF1",
+        header: "Macro-F1",
+        align: "right",
+        cell: (r) => <span className="text-ink">{r.macroF1}</span>,
+      },
+      {
+        key: "detail5Class",
+        header: "Rincian 5 kelas",
+        align: "right",
+        cell: (r) => <span className="text-muted">{r.detail5Class}</span>,
+      },
+      {
+        key: "forecastR2",
+        header: "Forecast R² log",
+        align: "right",
+        cell: (r) => <span className="text-ink">{r.forecastR2}</span>,
+      },
+      {
+        key: "fundamentalR2",
+        header: "Fundamental R² log",
+        align: "right",
+        cell: (r) => <span className="text-ink">{r.fundamentalR2}</span>,
+      },
+    ],
+    [],
+  );
+
+  const testTableColumns = useMemo<DataTableColumn<TestPredictionRow>[]>(
+    () => [
+      {
+        key: "player",
+        header: "Pemain",
+        align: "left",
+        cell: (r) => (
+          <PlayerCell
+            playerId={r.player_id}
+            name={r.name}
+            club={r.peak_club}
+            meta={`${r.age} thn`}
+            avatarSize={28}
+            showClubLogo={true}
+          />
+        ),
+      },
+      {
+        key: "league",
+        header: "Liga",
+        align: "left",
+        cell: (r) => <LeagueBadge league={r.league_name} size={14} className="text-muted" />,
+      },
+      {
+        key: "actual_trend",
+        header: "Tren Aktual",
+        align: "left",
+        cell: (r) => (
+          <TrendBadge trend={r.actual_trend} fallback={r.actual_trajectory} />
+        ),
+      },
+      {
+        key: "pred_trend",
+        header: "Tren Prediksi",
+        align: "left",
+        cell: (r) => (
+          <TrendBadge
+            trend={r.pred_trend}
+            fallback={r.pred_trajectory_clean}
+            wrong={Boolean(r.pred_trend && r.pred_trend !== r.actual_trend)}
+          />
+        ),
+      },
+      {
+        key: "actual_value",
+        header: "Nilai Aktual",
+        align: "right",
+        cell: (r) => <span className="font-semibold text-ink">{fmt.eur(r.actual_value_eur)}</span>,
+      },
+      {
+        key: "forecast",
+        header: "Forecast",
+        align: "right",
+        cell: (r) => (
+          <span className="text-muted">
+            {r.forecast_value_eur !== undefined ? fmt.eur(r.forecast_value_eur) : "-"}
+          </span>
+        ),
+      },
+      {
+        key: "fair_value",
+        header: "Nilai Wajar",
+        align: "right",
+        cell: (r) => <span className="text-muted">{fmt.eur(r.pred_value_eur)}</span>,
+      },
+      {
+        key: "residual",
+        header: "Gap Wajar",
+        align: "right",
+        cell: (r) => {
+          const isPositive = r.residual_eur > 0;
+          const isNegative = r.residual_eur < 0;
+          return (
+            <span
+              className={cn(
+                "font-semibold tabular-nums",
+                isPositive ? "text-positive" : isNegative ? "text-negative" : "text-muted",
+              )}
+            >
+              {isPositive ? "+" : ""}
+              {fmt.eur(r.residual_eur)}
+            </span>
+          );
+        },
+      },
+    ],
+    [],
+  );
 
   return (
     <div className="space-y-6">
@@ -387,8 +404,8 @@ export function DiagnosticsPanel({
         subtitle="Matriks klasifikasi tren, sebaran nilai aktual terhadap prediksi, validasi silang, dan rincian 484 pemain uji."
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <Panel className="flex flex-col">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+        <Panel className="flex flex-col justify-between">
           <div>
             <SectionHeader
               title="Interactive Confusion Matrix"
@@ -509,7 +526,7 @@ export function DiagnosticsPanel({
           </div>
         </Panel>
 
-        <Panel className="flex flex-col">
+        <Panel className="flex flex-col justify-between">
           <div>
             <SectionHeader
               title="Aktual vs Prediksi (€)"
@@ -565,21 +582,27 @@ export function DiagnosticsPanel({
         </Panel>
       ) : null}
 
-      <Panel>
+      <Panel className="space-y-4">
         <SectionHeader
           title={`Tabel ${fmt.int(preds.rows.length)} Data Uji (${filtered.length} tampil)`}
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(0);
+                }}
                 placeholder="Cari nama / klub / liga..."
                 aria-label="Cari nama, klub, atau liga"
                 className="min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-xs text-ink placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-accent"
               />
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(0);
+                }}
                 aria-label="Filter status valuasi"
                 className="min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-accent"
               >
@@ -592,84 +615,23 @@ export function DiagnosticsPanel({
           }
         />
 
-        <div className="mt-4 max-h-[520px] overflow-y-auto">
-          <DataTable
-            columns={testTableColumns}
-            rows={filtered}
-            rowKey={(r) => r.player_id}
-            framed={true}
-            emptyMessage="Tidak ada data pemain yang cocok dengan filter."
-            ariaLabel={`Tabel ${preds.rows.length} data pemain uji`}
-            mobileCard={(r) => {
-              const isPositive = r.residual_eur > 0;
-              const isNegative = r.residual_eur < 0;
-              return (
-                <div className="rounded-control border border-border bg-surface p-3 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <PlayerCell
-                      playerId={r.player_id}
-                      name={r.name}
-                      club={r.peak_club}
-                      meta={`${r.age} thn`}
-                      avatarSize={32}
-                      showClubLogo={true}
-                    />
-                    <LeagueBadge
-                      league={r.league_name}
-                      size={14}
-                      showName={false}
-                      className="shrink-0 text-muted"
-                    />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-rule text-xs">
-                    <span className="text-muted">Aktual:</span>
-                    <TrendBadge trend={r.actual_trend} fallback={r.actual_trajectory} />
-                    <span className="text-muted ml-1">Prediksi:</span>
-                    <TrendBadge
-                      trend={r.pred_trend}
-                      fallback={r.pred_trajectory_clean}
-                      wrong={Boolean(r.pred_trend && r.pred_trend !== r.actual_trend)}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs pt-1.5 border-t border-rule">
-                    <div>
-                      <span className="text-muted block text-xs">Nilai Aktual</span>
-                      <span className="font-semibold text-ink tabular-nums">
-                        {fmt.eur(r.actual_value_eur)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted block text-xs">Forecast</span>
-                      <span className="text-ink tabular-nums">
-                        {r.forecast_value_eur !== undefined ? fmt.eur(r.forecast_value_eur) : "-"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted block text-xs">Nilai Wajar</span>
-                      <span className="text-ink tabular-nums">{fmt.eur(r.pred_value_eur)}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted block text-xs">Gap Wajar</span>
-                      <span
-                        className={cn(
-                          "font-semibold tabular-nums",
-                          isPositive
-                            ? "text-positive"
-                            : isNegative
-                              ? "text-negative"
-                              : "text-muted",
-                        )}
-                      >
-                        {isPositive ? "+" : ""}
-                        {fmt.eur(r.residual_eur)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            }}
-          />
-        </div>
+        <DataTable
+          columns={testTableColumns}
+          rows={pageRows}
+          rowKey={(r) => r.player_id}
+          framed={true}
+          emptyMessage="Tidak ada data pemain yang cocok dengan filter."
+          ariaLabel={`Tabel ${preds.rows.length} data pemain uji`}
+        />
+
+        <Pagination
+          page={safePage + 1}
+          totalPages={totalPages}
+          totalItems={filtered.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={(p) => setPage(p - 1)}
+          unitLabel="pemain"
+        />
       </Panel>
     </div>
   );
