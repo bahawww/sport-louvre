@@ -30,6 +30,29 @@ function formatBytes(bytes: number): string {
 
 const PAGE_SIZE = 50; // rendering all 2,418 rows at once made the tab lag
 
+const DOWNLOAD_GROUPS = [
+  {
+    id: "dataset",
+    title: "1. Dataset dan sumbernya",
+    note: "Data yang dipakai melatih dan menguji model, sudah dengan perbaikan 508 baris lama.",
+  },
+  {
+    id: "model",
+    title: "2. Model dan workflow analisis",
+    note: "Model yang sudah dilatih, dan kode yang menghasilkannya dari CSV.",
+  },
+  {
+    id: "evaluation",
+    title: "3. Hasil pengujian dan evaluasi model",
+    note: "Angka pengujian pada 484 pemain uji, validasi silang, dan uji ke masa depan.",
+  },
+  {
+    id: "report",
+    title: "4. Laporan analisis",
+    note: "Ringkasan tiga halaman: data, metode, hasil, temuan, dan batasan.",
+  },
+] as const;
+
 export function DatasetPanel() {
   const manifest = useMediaManifest();
   const res = useApi<DatasetsResponse>("/datasets");
@@ -170,39 +193,76 @@ export function DatasetPanel() {
     <div className="space-y-6">
       <PageHeader
         title="Dataset & Unduhan"
-        subtitle="Unduh dataset Transfermarkt 2025/2026 dalam format CSV atau Parquet, atau telusuri seluruh 2.418 pemain."
+        subtitle="Empat keluaran proyek ini bisa diunduh: dataset beserta sumbernya, model dan workflow analisis, hasil pengujian, dan laporan analisis tiga halaman. Di bawahnya ada tabel seluruh pemain."
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
-        {res.data.files.map((f) => (
-          <Panel key={f.filename} className="flex flex-col justify-between gap-4">
-            <div>
-              <div className="flex items-center justify-between gap-2">
-                <Badge variant="neutral">{f.format}</Badge>
-                <span className="text-xs text-muted tabular-nums">
-                  {formatBytes(f.size_bytes)}
-                </span>
-              </div>
-              <h3 className="mt-3 text-sm font-semibold text-ink">{f.label}</h3>
-              <p className="mt-1 text-[13px] text-muted leading-relaxed">{f.description}</p>
-              <p className="mt-2 text-xs text-faint tabular-nums">
-                {fmt.int(f.rows)} baris · {f.columns} kolom
-              </p>
-            </div>
-            <a
-              href={f.download_url}
-              download={f.filename}
-              className={cn(
-                buttonVariants({ variant: "secondary", size: "sm" }),
-                "w-full mt-auto"
-              )}
+      {/* One row per deliverable: its name on the left, its files as a list on the right. */}
+      <Panel padding="none" className="divide-y divide-border">
+        {DOWNLOAD_GROUPS.map((g) => {
+          const files = res.data.files.filter((f) => (f.group ?? "dataset") === g.id);
+          if (!files.length) return null;
+          return (
+            <section
+              key={g.id}
+              aria-labelledby={`unduhan-${g.id}`}
+              className="grid gap-x-8 gap-y-3 p-4 sm:p-5 lg:grid-cols-[16rem_minmax(0,1fr)]"
             >
-              <Download className="size-4 shrink-0" aria-hidden="true" />
-              <span>Unduh {f.format}</span>
-            </a>
-          </Panel>
-        ))}
-      </div>
+              <div>
+                <h2 id={`unduhan-${g.id}`} className="text-[15px] font-semibold text-ink">
+                  {g.title}
+                </h2>
+                <p className="mt-1 text-[13px] leading-relaxed text-muted">{g.note}</p>
+              </div>
+              <div className="min-w-0">
+                <ul className="divide-y divide-rule">
+                  {files.map((f) => (
+                    <li
+                      key={f.filename}
+                      className="flex flex-col gap-2.5 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-6"
+                    >
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-medium text-ink">{f.label}</h3>
+                        <p className="mt-0.5 text-[13px] leading-relaxed text-muted">{f.description}</p>
+                        <p className="mt-1 text-xs text-faint tabular-nums">
+                          {f.format} · {formatBytes(f.size_bytes)}
+                          {f.rows != null ? ` · ${fmt.int(f.rows)} baris` : ""}
+                          {f.columns != null ? ` · ${f.columns} kolom` : ""}
+                        </p>
+                      </div>
+                      <a
+                        href={f.download_url}
+                        download={f.filename}
+                        aria-label={`Unduh ${f.label}`}
+                        className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "w-full shrink-0 sm:w-28")}
+                      >
+                        <Download className="size-4 shrink-0" aria-hidden="true" />
+                        <span>Unduh</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+                {g.id === "dataset" && res.data.sources?.length ? (
+                  <div className="mt-4 rounded-control bg-raised p-3 sm:p-4">
+                    <h3 className="text-[13px] font-medium text-ink">Sumber data</h3>
+                    <dl className="mt-1.5 space-y-1.5 text-[13px]">
+                      {res.data.sources.map((src) => (
+                        <div key={src.name} className="grid gap-x-4 sm:grid-cols-[14rem_minmax(0,1fr)]">
+                          <dt>
+                            <a href={src.url} target="_blank" rel="noreferrer" className="text-ink underline underline-offset-2">
+                              {src.name}
+                            </a>
+                          </dt>
+                          <dd className="leading-relaxed text-muted">{src.role}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          );
+        })}
+      </Panel>
 
       <Panel className="space-y-4">
         <SectionHeader

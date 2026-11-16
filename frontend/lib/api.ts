@@ -442,9 +442,16 @@ export interface DatasetFileMeta {
   description: string;
   format: string;
   size_bytes: number;
-  rows: number;
-  columns: number;
+  rows: number | null;
+  columns: number | null;
   download_url: string;
+  group?: "dataset" | "model" | "evaluation" | "report";
+}
+
+export interface DataSource {
+  name: string;
+  url: string;
+  role: string;
 }
 
 export interface DatasetPlayerRow {
@@ -469,6 +476,7 @@ export interface DatasetPlayerRow {
 
 export interface DatasetsResponse {
   files: DatasetFileMeta[];
+  sources?: DataSource[];
   total_players: number;
   players: DatasetPlayerRow[];
 }

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import io
 import json
+import os
 import threading
+import zipfile
 from collections import OrderedDict
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
@@ -425,30 +429,141 @@ def simulate(req: SimulateRequest) -> dict[str, Any]:
 
 DATASET_CATALOG: dict[str, dict[str, Any]] = {
     "transfermarkt_player_values.csv": {
+        "group": "dataset",
         "label": "Player Market Values (CSV)",
         "description": "Dataset utama pemain dari 5 liga top Eropa beserta 36 kolom fitur karier & target trajectory.",
         "format": "CSV",
         "media_type": "text/csv; charset=utf-8",
     },
     "transfermarkt_value_history.csv": {
+        "group": "dataset",
         "label": "Historical Valuations (CSV)",
         "description": "Titik riwayat valuasi pasar per pemain lengkap dengan tanggal, klub, dan usia.",
         "format": "CSV",
         "media_type": "text/csv; charset=utf-8",
     },
     "data_dictionary.csv": {
+        "group": "dataset",
         "label": "Data Dictionary (CSV)",
         "description": "Definisi lengkap seluruh kolom dan tipe data pada dataset Transfermarkt.",
         "format": "CSV",
         "media_type": "text/csv; charset=utf-8",
     },
     "transfermarkt_player_values.parquet": {
+        "group": "dataset",
         "label": "Player Market Values (Parquet)",
         "description": "Format biner Apache Parquet yang terkompresi untuk analitik cepat di Python/Spark.",
         "format": "Parquet",
         "media_type": "application/octet-stream",
     },
 }
+
+
+# Deliverables that are not plain files in the data folder. Each is built once per model load.
+EXTRA_DOWNLOADS: dict[str, dict[str, Any]] = {
+    "model_artifacts.joblib": {
+        "group": "model",
+        "label": "Model terlatih (joblib)",
+        "description": "Semua model yang dipakai situs ini: klasifikasi tren, prediksi harga, nilai wajar, "
+        "proyeksi 12 bulan, beserta interval konformalnya. Dibuka dengan joblib.load di Python; "
+        "butuh features.py dan ml_pipeline.py dari berkas workflow.",
+        "format": "Joblib",
+        "media_type": "application/octet-stream",
+    },
+    "workflow_pipeline.zip": {
+        "group": "model",
+        "label": "Workflow analisis (kode Python)",
+        "description": "features.py, ml_pipeline.py, evaluation.py dan requirements.txt: alur lengkap dari CSV "
+        "sampai model, sama dengan yang dijalankan server.",
+        "format": "ZIP",
+        "media_type": "application/zip",
+    },
+    "metrics_report.md": {
+        "group": "evaluation",
+        "label": "Laporan metrik lengkap",
+        "description": "Semua angka pengujian: holdout, validasi silang, uji ke masa depan, kalibrasi, interval, "
+        "dan perbandingan dengan pipeline lama.",
+        "format": "Markdown",
+        "media_type": "text/markdown; charset=utf-8",
+    },
+    "test_predictions.csv": {
+        "group": "evaluation",
+        "label": "Prediksi pemain uji (CSV)",
+        "description": "Satu baris per pemain uji: harga asli, tebakan model, selisih, tren asli dan tren tebakan.",
+        "format": "CSV",
+        "media_type": "text/csv; charset=utf-8",
+    },
+    "evaluation_overview.json": {
+        "group": "evaluation",
+        "label": "Hasil evaluasi (JSON)",
+        "description": "Angka mentah di balik semua grafik evaluasi situs ini, termasuk kartu data dan kartu model.",
+        "format": "JSON",
+        "media_type": "application/json",
+    },
+    "laporan_analisis.pdf": {
+        "group": "report",
+        "label": "Laporan analisis (PDF, 3 halaman)",
+        "description": "Ringkasan data, metode, hasil pengujian, temuan dan batasan.",
+        "format": "PDF",
+        "media_type": "application/pdf",
+    },
+}
+
+DATA_SOURCES = [
+    {
+        "name": "Transfermarkt",
+        "url": "https://www.transfermarkt.com",
+        "role": "Asal semua nilai pasar. Nilai ini taksiran komunitas dan editor, bukan harga transfer.",
+    },
+    {
+        "name": "salimt/football-datasets",
+        "url": "https://github.com/salimt/football-datasets",
+        "role": "Salinan data Transfermarkt yang dipakai untuk 1.910 pemain tambahan dan 492 posisi pemain lama.",
+    },
+    {
+        "name": "dcaribou/transfermarkt-datasets",
+        "url": "https://github.com/dcaribou/transfermarkt-datasets",
+        "role": "Posisi 16 pemain yang tidak ada di sumber di atas.",
+    },
+]
+
+_REPORTS_DIR = Path(__file__).resolve().parent / "reports"
+_WORKFLOW_FILES = ("features.py", "ml_pipeline.py", "evaluation.py", "requirements.txt")
+
+
+def _model_cache_file() -> Path | None:
+    cache_dir = Path(os.environ.get("MODEL_CACHE_DIR", "/app/cache"))
+    files = sorted(cache_dir.glob("artifacts-*.joblib"), key=lambda f: f.stat().st_mtime)
+    return files[-1] if files else None
+
+
+def _extra_bytes(filename: str) -> bytes | None:
+    """Content of a generated deliverable, or None when it cannot be produced."""
+    art = _get_artifacts()
+    if filename == "workflow_pipeline.zip":
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for name in _WORKFLOW_FILES:
+                src = Path(__file__).resolve().parent / name
+                if src.exists():
+                    zf.write(src, name)
+        return buf.getvalue()
+    if filename == "test_predictions.csv":
+        return pd.DataFrame(art.test_predictions["rows"]).to_csv(index=False).encode("utf-8-sig")
+    if filename == "evaluation_overview.json":
+        return json.dumps(jsonable_encoder(art.overview), ensure_ascii=False, indent=1).encode("utf-8")
+    path = _REPORTS_DIR / filename
+    return path.read_bytes() if path.exists() else None
+
+
+def _extra_cached(filename: str) -> bytes | None:
+    key = (id(_get_artifacts()), f"dl:{filename}")
+    if key not in _STATIC_JSON:
+        data = _extra_bytes(filename)
+        if data is None:
+            return None
+        _STATIC_JSON[key] = data
+    return _STATIC_JSON[key]
 
 
 @app.get("/api/datasets")
@@ -469,12 +584,35 @@ def _build_datasets() -> dict[str, Any]:
         files.append(
             {
                 "filename": fname,
+                "group": meta["group"],
                 "label": meta["label"],
                 "description": meta["description"],
                 "format": meta["format"],
                 "size_bytes": fpath.stat().st_size,
                 "rows": rows,
                 "columns": cols,
+                "download_url": f"/api/datasets/download/{fname}",
+            }
+        )
+    for fname, meta in EXTRA_DOWNLOADS.items():
+        if fname == "model_artifacts.joblib":
+            cache_file = _model_cache_file()
+            size = cache_file.stat().st_size if cache_file else None
+        else:
+            data = _extra_cached(fname)
+            size = len(data) if data is not None else None
+        if size is None:
+            continue
+        files.append(
+            {
+                "filename": fname,
+                "group": meta["group"],
+                "label": meta["label"],
+                "description": meta["description"],
+                "format": meta["format"],
+                "size_bytes": size,
+                "rows": len(art.test_predictions["rows"]) if fname == "test_predictions.csv" else None,
+                "columns": None,
                 "download_url": f"/api/datasets/download/{fname}",
             }
         )
@@ -502,11 +640,26 @@ def _build_datasets() -> dict[str, Any]:
         }
         for _, r in df.iterrows()
     ]
-    return {"files": files, "total_players": len(records), "players": records}
+    return {"files": files, "sources": DATA_SOURCES, "total_players": len(records), "players": records}
 
 
 @app.get("/api/datasets/download/{filename}")
-def download_dataset(filename: str) -> FileResponse:
+def download_dataset(filename: str) -> Response:
+    if filename in EXTRA_DOWNLOADS:
+        meta = EXTRA_DOWNLOADS[filename]
+        if filename == "model_artifacts.joblib":
+            cache_file = _model_cache_file()
+            if cache_file is None:
+                raise HTTPException(status_code=404, detail="Model file missing on disk")
+            return FileResponse(path=cache_file, filename=filename, media_type=meta["media_type"])
+        data = _extra_cached(filename)
+        if data is None:
+            raise HTTPException(status_code=404, detail="File missing on disk")
+        return Response(
+            content=data,
+            media_type=meta["media_type"],
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
     if filename not in DATASET_CATALOG:
         raise HTTPException(status_code=404, detail="Dataset file not found")
     fpath = resolve_data_dir() / filename

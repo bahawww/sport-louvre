@@ -6,7 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY features.py evaluation.py ml_pipeline.py main.py ./
-COPY reports/before_metrics.json ./reports/
+COPY reports/before_metrics.json reports/metrics_report.md reports/laporan_analisis.pdf ./reports/
 
 EXPOSE 8000
 
