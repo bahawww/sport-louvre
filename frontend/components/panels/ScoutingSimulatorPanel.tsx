@@ -21,7 +21,9 @@ import {
   PageHeader,
   Panel,
   PanelDividerGrid,
+  PanelSkeleton,
   SectionHeader,
+  Skeleton,
   Stat,
 } from "@/components/ui";
 import {
@@ -328,7 +330,13 @@ export function ScoutingSimulatorPanel() {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted">Memuat daftar pemain...</p>
+            <div role="status" aria-busy="true" aria-label="Memuat pemain" className="flex items-center gap-3 min-w-0">
+              <Skeleton className="h-12 w-12 rounded-full shrink-0" />
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-44" />
+                <Skeleton className="h-3.5 w-60 max-w-full" />
+              </div>
+            </div>
           )}
 
           <div className="relative shrink-0">
@@ -408,6 +416,8 @@ export function ScoutingSimulatorPanel() {
           }}
         />
       ) : null}
+
+      {!data && !sim.isError ? <PanelSkeleton /> : null}
 
       {/* 4. Key Numbers Hero Stats Grid */}
       {player && data ? (

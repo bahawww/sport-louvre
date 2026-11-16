@@ -30,7 +30,7 @@ const SELECT_STEP = 5;
 const LEARNERS = [
   { key: "linear", label: "Regresi linear", y: 45 },
   { key: "boost", label: "Gradient boosting", y: 125 },
-  { key: "tree", label: "Pohon keputusan", y: 205 },
+  { key: "tree", label: "Decision Tree", y: 205 },
 ] as const;
 const LEARNER_X = 525;
 const LEARNER_R = 18;

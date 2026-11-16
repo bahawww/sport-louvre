@@ -1,5 +1,6 @@
 "use client";
 
+import { PanelSkeleton } from "@/components/ui";
 import dynamic from "next/dynamic";
 import { type ComponentType, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
@@ -10,7 +11,7 @@ import {
   type TestPredictionsResponse,
 } from "@/lib/api";
 
-const loading = () => <div className="sh-load" aria-busy="true" aria-label="Memuat panel" />;
+const loading = () => <PanelSkeleton />;
 
 type PanelProps = { overview: OverviewResponse; preds: TestPredictionsResponse };
 

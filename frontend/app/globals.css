@@ -393,11 +393,24 @@ input[type="range"] {
   margin: 0 auto;
   padding: 1.25rem 1rem;
 }
-.sh-load {
-  height: 320px;
-  border-radius: var(--radius-panel);
-  border: 1px solid var(--border);
-  background-color: var(--surface);
+.sh-skel {
+  background-color: color-mix(in srgb, var(--text) 8%, transparent);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--text) 7%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: sh-skel 1.4s ease-in-out infinite;
+}
+@keyframes sh-skel {
+  from { background-position: 150% 0; }
+  to { background-position: -50% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sh-skel { animation: none; background-image: none; }
 }
 .sh-err {
   border-radius: var(--radius-panel);

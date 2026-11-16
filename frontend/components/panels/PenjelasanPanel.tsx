@@ -13,6 +13,7 @@ import {
   SectionHeader,
   Segmented,
   type SegmentedOption,
+  Skeleton,
 } from "@/components/ui";
 import {
   fetchApi,
@@ -456,7 +457,7 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
     {
       stage: "Pilih jenis model",
       code: "GroupKFold(5)",
-      does: `${candidates} kandidat dibandingkan lewat validasi silang di pemain latih saja. Data uji tidak disentuh. Model utama sesuai ketentuan tugas: pohon keputusan untuk tren, regresi linear untuk harga. Validasi silang sendiri mengunggulkan ${clean.best_model} dan ${tasks?.forecast.best_model ?? "-"}, yang tetap dipakai simulator.`,
+      does: `${candidates} kandidat dibandingkan lewat validasi silang di pemain latih saja. Data uji tidak disentuh. Model utama sesuai ketentuan tugas: Decision Tree untuk tren, regresi linear untuk harga. Validasi silang sendiri mengunggulkan ${clean.best_model} dan ${tasks?.forecast.best_model ?? "-"}, yang tetap dipakai simulator.`,
       figure: num(candidates),
       unit: "kandidat",
     },
@@ -678,9 +679,11 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
             {sim?.player ? (
               <HistoryChart sim={sim} model={model} />
             ) : (
-              <div className="py-24 text-center text-xs text-muted">
-                {example.isError ? "Contoh pemain gagal dimuat." : "Memuat riwayat harga..."}
-              </div>
+              example.isError ? (
+                <div className="py-24 text-center text-xs text-muted">Contoh pemain gagal dimuat.</div>
+              ) : (
+                <Skeleton className="m-4 h-56" role="status" aria-busy="true" aria-label="Memuat riwayat harga" aria-hidden={undefined} />
+              )
             )}
           </div>
 

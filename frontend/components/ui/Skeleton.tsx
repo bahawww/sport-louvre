@@ -8,7 +8,7 @@ export function Skeleton({
   return (
     <div
       aria-hidden="true"
-      className={clsx(" rounded-control bg-raised", className)}
+      className={clsx("sh-skel rounded-control", className)}
       {...props}
     />
   );
@@ -19,7 +19,13 @@ export function PanelSkeleton({
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={clsx("space-y-4 w-full", className)} {...props}>
+    <div
+      role="status"
+      aria-busy="true"
+      aria-label="Memuat"
+      className={clsx("space-y-4 w-full", className)}
+      {...props}
+    >
       {/* Header skeleton */}
       <div className="space-y-2">
         <Skeleton className="h-7 w-48 sm:w-64" />
@@ -47,6 +53,17 @@ export function PanelSkeleton({
         </div>
         <Skeleton className="h-64 w-full" />
       </div>
+    </div>
+  );
+}
+
+/** Placeholder lines for a block of text or a short list that is still loading. */
+export function SkeletonLines({ rows = 3, className }: { rows?: number; className?: string }) {
+  return (
+    <div role="status" aria-busy="true" aria-label="Memuat" className={clsx("space-y-2.5", className)}>
+      {Array.from({ length: rows }, (_, i) => (
+        <Skeleton key={i} className="h-3.5" style={{ width: `${[92, 78, 85, 64][i % 4]}%` }} />
+      ))}
     </div>
   );
 }

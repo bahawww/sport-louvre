@@ -45,6 +45,7 @@ export { Disclosure, type DisclosureProps } from "./Disclosure";
 export {
   Skeleton,
   PanelSkeleton,
+  SkeletonLines,
   EmptyState,
   ErrorState,
   type EmptyStateProps,

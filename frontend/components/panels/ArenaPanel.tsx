@@ -18,10 +18,10 @@ import {
 
 const MODEL_NAME: Record<string, { name: string; note: string }> = {
   "Ordinal HGB (calibrated)": { name: "Gradient boosting berurutan", note: "memperlakukan empat tren sebagai tangga, dari naik sampai jatuh" },
-  "HistGradientBoosting (calibrated)": { name: "Gradient boosting biasa", note: "ratusan pohon keputusan kecil yang saling memperbaiki" },
+  "HistGradientBoosting (calibrated)": { name: "Gradient boosting biasa", note: "ratusan Decision Tree kecil yang saling memperbaiki" },
   "Logistic Regression": { name: "Regresi logistik", note: "model garis lurus, paling sederhana" },
-  "Random Forest": { name: "Random forest", note: "ratusan pohon keputusan yang memilih bersama" },
-  "Decision Tree": { name: "Pohon keputusan", note: "satu pohon aturan ya/tidak yang bisa dibaca" },
+  "Random Forest": { name: "Random forest", note: "ratusan Decision Tree yang memilih bersama" },
+  "Decision Tree": { name: "Decision Tree", note: "satu pohon aturan ya/tidak yang bisa dibaca" },
   "Persistence (last state)": { name: "Tanpa model", note: "menganggap tren pemain tidak berubah" },
 };
 
@@ -351,8 +351,8 @@ export function ArenaPanel({
             />
           </div>
           <p className="mt-4 text-[13px] leading-relaxed text-muted">
-            Pohon keputusan dijadikan model utama klasifikasi karena ketentuan tugas, bukan karena skornya paling tinggi.
-            Tab Simulasi tetap memakai gradient boosting terkalibrasi, yang peluangnya paling bisa dipercaya.
+            Decision Tree dijadikan model utama klasifikasi karena ketentuan tugas, bukan karena skornya paling tinggi.
+            Tab Simulator tetap memakai gradient boosting terkalibrasi, yang peluangnya paling bisa dipercaya.
           </p>
         </Panel>
 

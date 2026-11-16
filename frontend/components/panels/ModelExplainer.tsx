@@ -29,7 +29,7 @@ const CLASSIFIERS: Record<string, { name: string; how: string }> = {
     how: "Tiap fitur diberi bobot tetap, lalu dijumlah menjadi peluang.",
   },
   "Decision Tree": {
-    name: "Pohon keputusan",
+    name: "Decision Tree",
     how: "Satu pohon berisi pertanyaan ya/tidak. Bisa dibaca dari atas ke bawah.",
   },
   "Persistence (last state)": {
@@ -240,7 +240,7 @@ function TreeDiagram({ nodes: fitted }: { nodes: TreeNode[] }) {
         style={{ minWidth: Math.min(W, 760) }}
         className="block h-auto w-full"
         role="img"
-        aria-label="Pohon keputusan untuk menebak tren harga"
+        aria-label="Decision Tree untuk menebak tren harga"
       >
         {nodes
           .filter((n) => !n.leaf)
@@ -332,7 +332,7 @@ export function ModelExplainer({ overview }: { overview: OverviewResponse }) {
         <SectionHeader
           as="h2"
           title="Model yang dipakai"
-          subtitle="Situs ini menjawab dua pertanyaan. Klasifikasi: tren harga pemain masuk kelompok mana. Prediksi: berapa harga di update berikutnya. Tiap pertanyaan dicoba dengan beberapa jenis model. Model utamanya pohon keputusan dan regresi linear, sesuai ketentuan tugas."
+          subtitle="Situs ini menjawab dua pertanyaan. Klasifikasi: tren harga pemain masuk kelompok mana. Prediksi: berapa harga di update berikutnya. Tiap pertanyaan dicoba dengan beberapa jenis model. Model utamanya Decision Tree dan regresi linear, sesuai ketentuan tugas."
           className="mb-4"
         />
         <div className="grid gap-6 lg:grid-cols-2">
@@ -344,8 +344,8 @@ export function ModelExplainer({ overview }: { overview: OverviewResponse }) {
             </p>
             <ModelList rows={clfRows} chosen={COURSE_CLASSIFIER} scoreLabel="Benar" />
             <p className="mt-2 text-xs leading-relaxed text-muted">
-              Pohon keputusan dipakai karena ketentuan tugas, bukan karena skornya paling tinggi. Di validasi silang,
-              peluang dari gradient boosting berurutan lebih bisa dipercaya, jadi tab Simulasi tetap memakai model itu.
+              Decision Tree dipakai karena ketentuan tugas, bukan karena skornya paling tinggi. Di validasi silang,
+              peluang dari gradient boosting berurutan lebih bisa dipercaya, jadi tab Simulator tetap memakai model itu.
             </p>
           </div>
           <div>
@@ -403,15 +403,15 @@ export function ModelExplainer({ overview }: { overview: OverviewResponse }) {
           <Panel as="section" padding="md">
             <SectionHeader
               as="h2"
-              title="Pohon keputusan: aturan menebak tren"
+              title="Decision Tree: aturan menebak tren"
               subtitle="Kegunaan: melihat aturan paling sederhana yang memisahkan pemain naik dari pemain turun. Baca dari atas, ikuti ya atau tidak sampai kotak berwarna."
               className="mb-4"
             />
             <TreeDiagram nodes={tree.nodes} />
             <p className="mt-4 text-xs leading-relaxed text-muted">
-              Pohon ini benar {pct1(tree.accuracy_test)} pada {num(tree.test_players)} pemain uji. Tanpa model{" "}
+              Decision Tree ini benar {pct1(tree.accuracy_test)} pada {num(tree.test_players)} pemain uji. Tanpa model{" "}
               {pct1(persistence)}, gradient boosting {pct1(trend.headline.metrics.accuracy)}. Angka di tiap kotak: jumlah pemain
-              latih yang sampai di situ, dan berapa persen yang memang masuk kelompok itu. Cabang yang ujungnya sama sudah digabung. Batas yang ditemukan pohon hampir sama
+              latih yang sampai di situ, dan berapa persen yang memang masuk kelompok itu. Cabang yang ujungnya sama sudah digabung. Batas yang ditemukan Decision Tree hampir sama
               dengan definisi kelompoknya sendiri (turun 20%, 30%, dan 60% dari puncak): tren pemain jarang pindah kelompok
               dalam satu update, dan itu sebabnya tebakan tanpa model sudah tinggi.
             </p>

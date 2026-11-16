@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 
-import { Badge, Button, Panel, SectionHeader } from "@/components/ui";
+import { Badge, Button, Panel, SectionHeader, SkeletonLines } from "@/components/ui";
 import type { OverviewResponse, SimulateResponse } from "@/lib/api";
 import { fmt } from "@/lib/format";
 import { COURSE_CLASSIFIER, COURSE_REGRESSOR } from "@/lib/models";
@@ -203,7 +203,7 @@ function Illustration({
     );
   }
   if (index === 2) {
-    return sim?.player ? <CutIllustration sim={sim} /> : <p className="text-[13px] text-muted">Memuat riwayat contoh...</p>;
+    return sim?.player ? <CutIllustration sim={sim} /> : <SkeletonLines rows={4} />;
   }
   if (index === 3) {
     const n = (k: string) => Number(feats?.[k] ?? 0);
@@ -224,7 +224,7 @@ function Illustration({
         />
       </div>
     ) : (
-      <p className="text-[13px] text-muted">Memuat fitur contoh...</p>
+      <SkeletonLines rows={6} />
     );
   }
   if (index === 4) {
