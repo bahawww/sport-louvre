@@ -85,7 +85,7 @@ export default function DashboardPage() {
   const preds = useApi<TestPredictionsResponse>("/test-predictions");
   const ActivePanel = PANELS[tab ?? "arena"];
   const metaText = overview.data
-    ? `${overview.data.dataset.total_players.toLocaleString("id-ID")} pemain · ${overview.data.dataset.leagues.length} liga`
+    ? `${overview.data.dataset.total_players.toLocaleString("id-ID")} pemain · ${overview.data.dataset.leagues.length} liga eropa`
     : null;
 
   return (
@@ -103,12 +103,13 @@ export default function DashboardPage() {
               Menu
             </button>
             <svg className="sh-mark" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M12 3.5 21.5 20h-19z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-              <path d="M7.6 12.5h8.8" stroke="currentColor" strokeWidth="1.8" />
-              <circle className="dot" cx="12" cy="16.2" r="1.9" />
+              <rect x="2.5" y="4.5" width="19" height="15" rx="2" stroke="currentColor" strokeWidth="1.7" />
+              <path d="M12 4.5v15M2.5 8.5h3.2v7H2.5M21.5 8.5h-3.2v7h3.2" stroke="currentColor" strokeWidth="1.5" />
+              <circle cx="12" cy="12" r="2.7" stroke="currentColor" strokeWidth="1.5" />
+              <circle className="dot" cx="12" cy="12" r="1.2" />
             </svg>
             <b className="sh-title">Sport Louvre</b>
-            <span className="sh-sub sh-only-lg">2025/26</span>
+            <span className="sh-sub sh-only-lg">Football player market value analysis</span>
           </div>
 
           <nav aria-label="Navigasi utama" className="sh-nav-top">

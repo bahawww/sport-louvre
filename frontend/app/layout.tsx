@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   description:
     "Interactive ML dashboard for Transfermarkt 2025/2026 player market value trajectories: Clean vs Leakage classification, market value regression, error analysis, and scouting simulator.",
   icons: {
-    icon: "/favicon.svg",
+    icon: "/favicon.svg?v=2",
   },
 };
 

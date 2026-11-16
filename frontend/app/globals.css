@@ -333,6 +333,10 @@ input[type="range"] {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.sh-brand .sh-sub {
+  font-size: 0.9375rem;
+  line-height: 1.25;
+}
 .sh-nav {
   flex: 1;
   overflow-y: auto;
