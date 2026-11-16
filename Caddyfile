@@ -16,6 +16,10 @@
 	@media path /media/*
 	header @media >Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
 
+	# Downloads are rebuilt in place under the same name, so no edge or browser copy may outlive them.
+	@downloads path /api/datasets/download/*
+	header @downloads >Cache-Control "no-store"
+
 	handle /api/* {
 		reverse_proxy api:8000
 	}

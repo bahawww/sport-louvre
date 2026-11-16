@@ -613,7 +613,7 @@ def _build_datasets() -> dict[str, Any]:
                 "size_bytes": size,
                 "rows": len(art.test_predictions["rows"]) if fname == "test_predictions.csv" else None,
                 "columns": None,
-                "download_url": f"/api/datasets/download/{fname}",
+                "download_url": f"/api/datasets/download/{fname}?v={size}",
             }
         )
 
