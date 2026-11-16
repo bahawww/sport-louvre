@@ -72,6 +72,23 @@ const TREND_TONE_MAP: Record<string, MeterTone> = {
   falling_sharply: "crimson",
 };
 
+// The panel unmounts when another tab opens, so the pick is kept for the browser session.
+const LAST_PLAYER_KEY = "simulator-player";
+function lastPlayerId(): string | null {
+  try {
+    return sessionStorage.getItem(LAST_PLAYER_KEY);
+  } catch {
+    return null;
+  }
+}
+function rememberPlayerId(id: string) {
+  try {
+    sessionStorage.setItem(LAST_PLAYER_KEY, id);
+  } catch {
+    // storage blocked: the panel just opens on the default player
+  }
+}
+
 export function ScoutingSimulatorPanel() {
   const theme = useChartTheme();
   const manifest = useMediaManifest();
@@ -98,15 +115,18 @@ export function ScoutingSimulatorPanel() {
 
   const selectPlayer = (p: DatasetPlayerRow) => {
     setPlayer(p);
+    rememberPlayerId(p.player_id);
     setScenario({ horizonMonths: DEFAULT_HORIZON_MONTHS, shockPct: 0, league: p.league_name });
     setDraft({ horizonMonths: DEFAULT_HORIZON_MONTHS, shockPct: 0 });
     setPickerOpen(false);
     setSearch("");
   };
 
-  // Start with the most valuable player so the panel is never empty.
+  // Reopen on the player picked last time; otherwise the most valuable one, so the panel is never empty.
   useEffect(() => {
-    if (!player && datasets.data?.players.length) selectPlayer(datasets.data.players[0]);
+    const list = datasets.data?.players;
+    if (player || !list?.length) return;
+    selectPlayer(list.find((p) => p.player_id === lastPlayerId()) ?? list[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [datasets.data]);
 
