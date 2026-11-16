@@ -115,7 +115,7 @@ function CutIllustration({ sim }: { sim: SimulateResponse }) {
         value={cut}
         onChange={(e) => setCut(Number(e.target.value))}
         aria-label="Geser titik potong"
-        className="mt-3 w-full cursor-pointer accent-primary"
+        className="mt-3 w-full cursor-pointer accent-accent"
       />
       <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
         Soal ke-{cut} dari {hist.length - 1} milik {sim.player!.name}: bahan{" "}
@@ -270,7 +270,7 @@ function Illustration({
                 <span className="mt-1 block h-1.5 rounded-full bg-rule overflow-hidden">
                   <span
                     className={cn(
-                      "block h-1.5 rounded-full transition-all",
+                      "block h-1.5 rounded-full transition-[width]",
                       chosen ? "bg-positive" : "bg-control"
                     )}
                     style={{ width: `${(r.loss / max) * 100}%` }}

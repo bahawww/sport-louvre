@@ -76,6 +76,9 @@ export default function DashboardPage() {
   };
 
   const isDark = resolvedTheme !== "light";
+  // The stored theme is only known in the browser, so the label waits for mount.
+  const [themeReady, setThemeReady] = useState(false);
+  useEffect(() => setThemeReady(true), []);
   const toggleTheme = () => setTheme(isDark ? "light" : "dark");
   const overview = useApi<OverviewResponse>("/overview");
   const preds = useApi<TestPredictionsResponse>("/test-predictions");
@@ -98,6 +101,11 @@ export default function DashboardPage() {
             >
               Menu
             </button>
+            <svg className="sh-mark" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 3.5 21.5 20h-19z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+              <path d="M7.6 12.5h8.8" stroke="currentColor" strokeWidth="1.8" />
+              <circle className="dot" cx="12" cy="16.2" r="1.9" />
+            </svg>
             <b className="sh-title">Sport Louvre</b>
             <span className="sh-sub sh-only-lg">2025/26</span>
           </div>
@@ -118,8 +126,8 @@ export default function DashboardPage() {
 
           <div className="sh-right">
             {metaText && <span className="sh-sub sh-meta">{metaText}</span>}
-            <button type="button" onClick={toggleTheme} className="sh-ibtn" aria-label="Ganti tema" suppressHydrationWarning>
-              {isDark ? "Terang" : "Gelap"}
+            <button type="button" onClick={toggleTheme} className="sh-ibtn" aria-label="Ganti tema">
+              {themeReady ? (isDark ? "Terang" : "Gelap") : "Tema"}
             </button>
           </div>
         </div>

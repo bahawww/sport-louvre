@@ -136,13 +136,13 @@ export function TrajectoryExplorerPanel() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Cari nama pemain atau klub..."
               aria-label="Cari nama pemain atau klub"
-              className="w-full min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-[13px] text-ink placeholder:text-faint focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-[13px] text-ink placeholder:text-faint focus:outline-none focus:ring-1 focus:ring-accent"
             />
             <select
               value={league}
               onChange={(e) => setLeague(e.target.value)}
               aria-label="Filter liga"
-              className="w-full min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-accent"
             >
               <option value="">Semua 5 Liga Top</option>
               {LEAGUES.filter(Boolean).map((l) => (

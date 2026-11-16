@@ -90,7 +90,7 @@ export function DataTable<T>({
             aria-label={ariaLabel}
           >
           <thead>
-            <tr className="border-b border-border bg-raised">
+            <tr className="border-b border-border">
               {columns.map((col) => {
                 const isRight = col.align === "right";
                 return (

@@ -1,13 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Geist } from "next/font/google";
 
 import "./globals.css";
 import { Providers } from "./providers";
 
-const jakarta = Plus_Jakarta_Sans({
+const geist = Geist({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-jakarta",
+  variable: "--font-geist",
   display: "swap",
 });
 
@@ -26,7 +25,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="id" className={jakarta.variable} suppressHydrationWarning>
+    <html lang="id" className={geist.variable} suppressHydrationWarning>
       <body className="min-h-dvh bg-ground text-ink antialiased">
         <Providers>{children}</Providers>
       </body>

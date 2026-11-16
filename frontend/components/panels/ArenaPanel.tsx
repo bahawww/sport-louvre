@@ -80,7 +80,7 @@ function ModelRace({ rows, noise }: { rows: RaceRow[]; noise: number }) {
           <div className="relative h-full min-h-12" title={r.note}>
             {chosen && noise > 0 ? (
               <span
-                className="absolute inset-y-0 bg-primary/10"
+                className="absolute inset-y-0 bg-accent/10"
                 style={{ left: x(Math.max(lo, chosen.value - noise)), right: `calc(100% - ${x(Math.min(hi, chosen.value + noise))})` }}
               />
             ) : null}
@@ -89,7 +89,7 @@ function ModelRace({ rows, noise }: { rows: RaceRow[]; noise: number }) {
             <span
               className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-transform ${
                 r.chosen
-                  ? "size-4 bg-primary ring-4 ring-primary/25"
+                  ? "size-4 bg-accent ring-4 ring-accent/25"
                   : r.baseline
                     ? "size-3 border-2 border-warning bg-surface"
                     : "size-3 bg-muted"
@@ -123,7 +123,7 @@ function ModelRace({ rows, noise }: { rows: RaceRow[]; noise: number }) {
           garis yang harus dikalahkan: tanpa model
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-3 w-4 bg-primary/20" />
+          <span className="h-3 w-4 bg-accent/20" />
           selisih di dalam area ini masih kebetulan
         </span>
       </p>
@@ -134,7 +134,7 @@ function ModelRace({ rows, noise }: { rows: RaceRow[]; noise: number }) {
 /** 100 squares, one per 100 test players: filled = guessed right. */
 function Waffle({ value, tone, title, note }: { value: number; tone: "accent" | "warn"; title: string; note: string }) {
   const filled = Math.round(value * 100);
-  const on = tone === "accent" ? "bg-primary" : "bg-warning";
+  const on = tone === "accent" ? "bg-accent" : "bg-warning";
   return (
     <div>
       <div className="grid max-w-[168px] grid-cols-10 gap-[3px]" role="img" aria-label={`${filled} dari 100 pemain tertebak benar`}>
@@ -327,7 +327,7 @@ export function ArenaPanel({
         <Panel className="h-full flex flex-col">
           <div>
             <SectionHeader
-              title="Empat jenis model yang dicoba"
+              title="Jenis model yang dicoba"
               subtitle={`Seberapa sering tiap model benar menebak tren. Sumbunya diperbesar supaya bedanya terlihat: selisih antar model hanya ${(spread * 100).toFixed(1).replace(".", ",")} poin, masih di dalam area kebetulan.`}
             />
             <ModelRace

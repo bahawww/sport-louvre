@@ -30,7 +30,7 @@ const median = (xs: number[]) => {
 
 /** How far a guess landed from the real price, in words a reader can picture. */
 const BUCKETS: { label: string; hint: string; max: number; tone: MeterTone; dotClass: string }[] = [
-  { label: "Hampir tepat", hint: "selisih sampai 10%", max: 0.1, tone: "mint", dotClass: "bg-primary" },
+  { label: "Hampir tepat", hint: "selisih sampai 10%", max: 0.1, tone: "mint", dotClass: "bg-accent" },
   { label: "Cukup dekat", hint: "10 sampai 25%", max: 0.25, tone: "sky", dotClass: "bg-info" },
   { label: "Meleset", hint: "25 sampai 50%", max: 0.5, tone: "amber", dotClass: "bg-warning" },
   { label: "Meleset jauh", hint: "lebih dari 50%", max: Infinity, tone: "crimson", dotClass: "bg-negative" },
@@ -358,8 +358,8 @@ export function ErrorAnalysisPanel({
           <div className="h-1.5 flex-1 rounded-full bg-raised overflow-hidden">
             <div
               className={cn(
-                "h-full rounded-full transition-all",
-                s === worst ? "bg-warning" : "bg-primary",
+                "h-full rounded-full transition-[width]",
+                s === worst ? "bg-warning" : "bg-accent",
               )}
               style={{ width: `${Math.min(100, Math.max(0, s.model * 100))}%` }}
             />
@@ -543,8 +543,8 @@ export function ErrorAnalysisPanel({
                   <div className="h-1.5 w-full rounded-full bg-raised overflow-hidden">
                     <div
                       className={cn(
-                        "h-full rounded-full transition-all",
-                        s === worst ? "bg-warning" : "bg-primary",
+                        "h-full rounded-full transition-[width]",
+                        s === worst ? "bg-warning" : "bg-accent",
                       )}
                       style={{ width: `${Math.min(100, Math.max(0, s.model * 100))}%` }}
                     />

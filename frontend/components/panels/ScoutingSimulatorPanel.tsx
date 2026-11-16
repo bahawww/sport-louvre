@@ -352,37 +352,37 @@ export function ScoutingSimulatorPanel() {
                   onClick={() => setPickerOpen(false)}
                   aria-hidden="true"
                 />
-                <div className="absolute right-0 top-full z-30 mt-2 w-[min(22rem,calc(100vw-2rem))] max-w-full rounded-panel border border-border bg-surface p-3">
+                <div className="absolute inset-x-0 top-full z-30 mt-2 rounded-panel sm:left-auto sm:w-[26rem] border border-border bg-surface p-3 shadow-[0_12px_28px_rgb(0_0_0/0.18)]">
                   <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
                     <input
                       autoFocus
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                       placeholder="Nama, klub, liga, atau posisi..."
-                      className="min-h-[44px] lg:min-h-[36px] w-full rounded-control border border-border bg-raised pl-8 pr-3 text-xs text-ink placeholder:text-muted focus:border-control focus:outline-none"
+                      className="min-h-[44px] lg:min-h-[40px] w-full rounded-control border border-border bg-raised pl-9 pr-3 text-sm text-ink placeholder:text-muted focus:border-control focus:outline-none"
                     />
                   </div>
-                  <div className="mt-2 max-h-72 divide-y divide-rule overflow-y-auto">
+                  <div className="mt-2 max-h-[22rem] divide-y divide-rule overflow-y-auto">
                     {matches.map((p) => (
                       <button
                         key={p.player_id}
                         type="button"
                         onClick={() => selectPlayer(p)}
-                        className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-control px-2.5 py-2 text-left transition hover:bg-active"
+                        className="flex min-h-[52px] w-full items-center justify-between gap-3 rounded-control px-2.5 py-2 text-left transition-colors hover:bg-active"
                       >
-                        <div className="flex min-w-0 items-center gap-2.5">
-                          <PlayerAvatar playerId={p.player_id} name={p.name} size={28} />
+                        <div className="flex min-w-0 items-center gap-3">
+                          <PlayerAvatar playerId={p.player_id} name={p.name} size={36} />
                           <div className="min-w-0">
-                            <span className="block truncate text-xs font-semibold text-ink">
+                            <span className="block truncate text-sm font-medium text-ink">
                               {p.name}
                             </span>
-                            <span className="block truncate text-[11px] text-muted">
+                            <span className="block truncate text-xs text-muted">
                               {resolveClubName(manifest, p.player_id, p.peak_club)} · {p.position ?? "-"}
                             </span>
                           </div>
                         </div>
-                        <span className="shrink-0 text-[11px] font-semibold text-positive tabular-nums">
+                        <span className="shrink-0 text-sm font-medium text-ink tabular-nums">
                           {fmt.eurShort(p.current_value_eur)}
                         </span>
                       </button>
@@ -551,7 +551,7 @@ export function ScoutingSimulatorPanel() {
                 onPointerUp={commitDraft}
                 onKeyUp={commitDraft}
                 onBlur={commitDraft}
-                className="mt-2 w-full accent-primary cursor-pointer"
+                className="mt-2 w-full accent-accent cursor-pointer"
               />
             </div>
 

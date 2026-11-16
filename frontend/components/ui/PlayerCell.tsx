@@ -48,7 +48,7 @@ export function PlayerCell({
           {badge ? <div className="shrink-0">{badge}</div> : null}
         </div>
         {displayClub || meta ? (
-          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted truncate">
+          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted">
             {showClubLogo && displayClub ? (
               <ClubBadge
                 club={displayClub}
@@ -58,9 +58,10 @@ export function PlayerCell({
                 className="shrink-0 text-muted"
               />
             ) : null}
-            {displayClub ? <span className="truncate">{displayClub}</span> : null}
-            {displayClub && meta ? <span className="text-faint">·</span> : null}
-            {meta ? <span className="truncate">{meta}</span> : null}
+            {displayClub ? <span className="min-w-0 truncate">{displayClub}</span> : null}
+            
+            {/* On a narrow row the details drop to their own line instead of being cut off. */}
+            {meta ? <span className="whitespace-nowrap">{displayClub ? "· " : ""}{meta}</span> : null}
           </div>
         ) : null}
       </div>

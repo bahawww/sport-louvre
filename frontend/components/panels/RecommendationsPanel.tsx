@@ -123,7 +123,7 @@ function PlayerList({ rows, tone }: { rows: OutlookRow[]; tone: "buy" | "risk" }
               <span className="mt-1.5 block h-1 w-28 sm:w-32 rounded-full bg-rule sm:ml-auto overflow-hidden">
                 <span
                   className={cn(
-                    "block h-full rounded-full transition-all",
+                    "block h-full rounded-full transition-[width]",
                     tone === "buy" ? "bg-positive" : "bg-negative"
                   )}
                   style={{ width: `${Math.min(100, Math.max(0, chance * 100))}%` }}

@@ -50,23 +50,23 @@ export interface ChartTheme {
 
 const DEFAULT_DARK_THEME: ChartTheme = {
   isDark: true,
-  chart1: "#10b981",
-  chart2: "#38bdf8",
-  chart3: "#f59e0b",
-  chart4: "#f87171",
-  chartColors: ["#10b981", "#38bdf8", "#f59e0b", "#f87171"],
-  ink: "#e4e4e7",
-  muted: "#9ca3af",
-  grid: "#23262e",
-  axisInk: "#9ca3af",
-  surface: "#121316",
-  raised: "#1a1c20",
-  border: "#262930",
-  positive: "#34d399",
-  warning: "#fbbf24",
-  negative: "#f87171",
-  info: "#38bdf8",
-  accent: "#10b981",
+  chart1: "#5fd38d",
+  chart2: "#c9c9c9",
+  chart3: "#e5a93b",
+  chart4: "#ef6b6b",
+  chartColors: ["#5fd38d", "#c9c9c9", "#e5a93b", "#ef6b6b"],
+  ink: "#ececec",
+  muted: "#b4b4b4",
+  grid: "#262626",
+  axisInk: "#b4b4b4",
+  surface: "#141414",
+  raised: "#1e1e1e",
+  border: "#242424",
+  positive: "#5fd38d",
+  warning: "#e5a93b",
+  negative: "#ef6b6b",
+  info: "#c9c9c9",
+  accent: "#5fd38d",
 };
 
 export function useChartTheme(): ChartTheme {
@@ -82,10 +82,10 @@ export function useChartTheme(): ChartTheme {
       return v || fallback;
     };
 
-    const c1 = getVal("--chart-1", isDark ? "#10b981" : "#059669");
-    const c2 = getVal("--chart-2", isDark ? "#38bdf8" : "#0284c7");
-    const c3 = getVal("--chart-3", isDark ? "#f59e0b" : "#d97706");
-    const c4 = getVal("--chart-4", isDark ? "#f87171" : "#dc2626");
+    const c1 = getVal("--chart-1", isDark ? "#5fd38d" : "#1b7a45");
+    const c2 = getVal("--chart-2", isDark ? "#c9c9c9" : "#4a4a48");
+    const c3 = getVal("--chart-3", isDark ? "#e5a93b" : "#b45309");
+    const c4 = getVal("--chart-4", isDark ? "#ef6b6b" : "#c4242a");
 
     setTheme({
       isDark,
@@ -94,18 +94,18 @@ export function useChartTheme(): ChartTheme {
       chart3: c3,
       chart4: c4,
       chartColors: [c1, c2, c3, c4],
-      ink: getVal("--chart-ink", isDark ? "#e4e4e7" : "#111827"),
-      muted: getVal("--chart-muted", isDark ? "#9ca3af" : "#4b5563"),
-      grid: getVal("--grid", isDark ? "#23262e" : "#e5e7eb"),
-      axisInk: getVal("--axis-ink", isDark ? "#9ca3af" : "#4b5563"),
-      surface: getVal("--surface", isDark ? "#121316" : "#ffffff"),
-      raised: getVal("--raised", isDark ? "#1a1c20" : "#f0f2f5"),
-      border: getVal("--border", isDark ? "#262930" : "#e2e5ea"),
-      positive: getVal("--positive", isDark ? "#34d399" : "#047857"),
-      warning: getVal("--warning", isDark ? "#fbbf24" : "#b45309"),
-      negative: getVal("--negative", isDark ? "#f87171" : "#dc2626"),
-      info: getVal("--info", isDark ? "#38bdf8" : "#0369a1"),
-      accent: getVal("--accent", isDark ? "#10b981" : "#059669"),
+      ink: getVal("--chart-ink", isDark ? "#ececec" : "#0d0d0c"),
+      muted: getVal("--chart-muted", isDark ? "#b4b4b4" : "#5a5d5a"),
+      grid: getVal("--grid", isDark ? "#262626" : "#e5e5e3"),
+      axisInk: getVal("--axis-ink", isDark ? "#b4b4b4" : "#5a5d5a"),
+      surface: getVal("--surface", isDark ? "#141414" : "#ffffff"),
+      raised: getVal("--raised", isDark ? "#1e1e1e" : "#f1f1ef"),
+      border: getVal("--border", isDark ? "#242424" : "#e5e5e3"),
+      positive: getVal("--positive", isDark ? "#5fd38d" : "#1b7a45"),
+      warning: getVal("--warning", isDark ? "#e5a93b" : "#92400e"),
+      negative: getVal("--negative", isDark ? "#ef6b6b" : "#c4242a"),
+      info: getVal("--info", isDark ? "#c9c9c9" : "#5a5d5a"),
+      accent: getVal("--accent", isDark ? "#5fd38d" : "#1b7a45"),
     });
   }, [resolvedTheme]);
 
@@ -169,7 +169,12 @@ export function EChart({
 
   useEffect(() => {
     if (!ready || !chartInstanceRef.current) return;
-    chartInstanceRef.current.setOption(option, { notMerge: true });
+    // The canvas does not inherit CSS, so hand it the page's own typeface.
+    const fontFamily = getComputedStyle(document.body).fontFamily;
+    chartInstanceRef.current.setOption(
+      { ...option, textStyle: { fontFamily, ...(option as { textStyle?: object }).textStyle } },
+      { notMerge: true },
+    );
   }, [option, ready]);
 
   return (

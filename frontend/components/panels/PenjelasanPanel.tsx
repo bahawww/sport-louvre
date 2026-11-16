@@ -654,7 +654,7 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
               </span>
             ) : null}
             <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-primary" />
+              <span className="size-2 rounded-full bg-accent" />
               Ditebak, dengan rentang 80%
             </span>
           </div>
@@ -715,7 +715,7 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
       <WorkflowRoadmap steps={workflow} overview={overview} sim={example.data} />
       <ModelExplainer overview={overview} />
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid items-start gap-5 lg:grid-cols-2">
         <Panel as="section" padding="md">
           <SectionHeader
             as="h2"

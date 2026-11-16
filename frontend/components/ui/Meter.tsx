@@ -21,7 +21,7 @@ export interface MeterProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const TONE_BG_MAP: Record<MeterTone, string> = {
-  mint: "bg-primary",
+  mint: "bg-accent",
   sky: "bg-info",
   amber: "bg-warning",
   orange: "bg-[var(--pill-orange-ink)]",
@@ -77,7 +77,7 @@ export function Meter({
       >
         <div
           style={{ width: `${pct}%` }}
-          className={cn("h-full rounded-chip transition-all duration-300", TONE_BG_MAP[tone])}
+          className={cn("h-full rounded-chip transition-[width] duration-300", TONE_BG_MAP[tone])}
         />
       </div>
     </div>
