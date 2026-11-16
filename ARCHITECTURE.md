@@ -42,9 +42,12 @@ Source (`data/Football_Player_Market_Value_Trajectories/`, mounted read-only at 
    In the previous "Clean" mode `peak_value_eur > pre_peak_value_eur` identified `rising_star`
    exactly and equalled the regression target for 17.9% of players. No CSV summary column is a
    model feature any more.
-3. **Legacy 508 rows are damaged.** `position` holds a euro string, `position_group` is "Other",
-   `current_club` holds the nationality, `age` disagrees with the history in 46% of rows.
-   Positions are repaired for 492 rows (16 stay unknown); age comes from the history.
+3. **Legacy 508 rows arrived damaged.** `position` held a euro string, `position_group` was
+   "Other", `current_club` held the nationality, `age` was missing or more than a year off the
+   history in 145 rows. `scripts/apply_profile_patch.py` repaired the CSV and parquet in place
+   on 2026-11-16: position from `player_profile_patch.csv` (492 rows from salimt, 16 from
+   dcaribou/transfermarkt-datasets), club and age from the latest valuation. The original files
+   are in `data/backup_508/`. The model still takes age from the history, not from this column.
 4. **Club history is unusable.** `num_clubs_career` is 1 for all 1,910 newer rows, so it only
    marks the data source. It is not a feature, and club-move scenarios are not offered.
 5. **Demonstrated leakage** (`value_cagr`, `post_peak_decline_pct`, `is_at_peak`, ...) is kept

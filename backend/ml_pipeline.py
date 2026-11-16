@@ -149,14 +149,16 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame, dict[str, PlayerSeries], di
     df["player_id"] = df["player_id"].astype(str)
     hist["player_id"] = hist["player_id"].astype(str)
 
-    # The 508 legacy rows have shifted profile columns: `position` holds a euro string and
-    # `position_group` is "Other". Apply the sidecar from scripts/repair_legacy_profiles.py.
+    # The 508 legacy rows arrived with shifted profile columns: `position` held a euro string and
+    # `position_group` was "Other". scripts/apply_profile_patch.py has written the sidecar into
+    # the CSV; it is applied again here so an unrepaired copy of the file loads the same way.
     broken = df["position"].astype(str).str.startswith("€")
     repaired = 0
     patch_path = players_path.parent / "player_profile_patch.csv"
     if patch_path.exists():
         patch = pd.read_csv(patch_path, dtype=str).set_index("player_id")
-        hit = broken & df["player_id"].isin(patch.index)
+        hit = df["player_id"].isin(patch.index)
+        broken = broken | hit
         df.loc[hit, "position"] = df.loc[hit, "player_id"].map(patch["position"])
         df.loc[hit, "position_group"] = df.loc[hit, "player_id"].map(patch["position_group"])
         repaired = int(hit.sum())

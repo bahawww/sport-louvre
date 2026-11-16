@@ -4,7 +4,11 @@ The legacy rows carry shifted columns: `position` holds a euro string ("€200.0
 `position_group` is always "Other" and `current_club` holds the nationality. This script
 looks the players up in salimt/football-datasets `player_profiles.csv` (the same source
 scripts/expand_dataset.py uses) and writes a sidecar `player_profile_patch.csv` next to the
-dataset. The original CSV is left untouched; backend/ml_pipeline.py applies the sidecar on load.
+dataset. scripts/apply_profile_patch.py then writes the sidecar into the CSV and parquet.
+
+Sixteen players missing from that source were added to the sidecar by hand from
+dcaribou/transfermarkt-datasets `players.csv` (2026-11-16). Once the CSV is repaired this
+script finds no broken rows and leaves the sidecar alone.
 
 Usage: python scripts/repair_legacy_profiles.py [--cache-dir /tmp/salimt]
 """
@@ -43,6 +47,9 @@ def main() -> None:
 
     players = pd.read_csv(DATA_DIR / "transfermarkt_player_values.csv", encoding="utf-8-sig")
     broken = players[players["position"].astype(str).str.startswith("€")]
+    if broken.empty:
+        print("no broken rows left; sidecar kept as is")
+        return
     profiles = pd.read_csv(
         src, usecols=["player_id", "position", "main_position"], low_memory=False
     ).drop_duplicates("player_id")
