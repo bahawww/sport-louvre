@@ -53,7 +53,7 @@ every field that existed before is still present with the same type.
   - **new** `valuation_basis`: `ok`, `breakout` (above the band with a new all-time high in the
     hidden 12 months) or `short_history` (< 12 months of history). Only `ok` rows are ever flagged.
   - **new**: `actual_trend, pred_trend, pred_trend_confidence` (4-class view),
-    `position, position_group, fair_value_eur, fair_value_range_eur, previous_value_eur, forecast_value_eur, forecast_range_eur, forecast_residual_eur, pred_trajectory_confidence`
+    `position, position_group, fair_value_eur, fair_value_range_eur, previous_value_eur, forecast_value_eur, forecast_range_eur, linear_value_eur (Linear Regression candidate, display only), forecast_residual_eur, pred_trajectory_confidence`
 - `undervalued` / `overvalued`: up to 15 flagged test rows, largest absolute gap first.
 - **new** `screening_all`: out-of-fold fair value for all 2,418 players:
   `{ method, players, metrics, band_coverage, gap_vs_hidden_window_return_corr, status_counts, basis_counts, undervalued[25], overvalued[25] }`

@@ -1237,6 +1237,9 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
             if name == best:
                 reg_best[task] = est
                 reg_pred[task] = est.predict(test[cols])
+            if task == "forecast" and name == "Linear Regression (log)":
+                # Shown next to the served model in the diagnostics scatter; never served.
+                linear_pred = pred
         ci = fit_conformal(task, cols, fit_df, cal_df)
         tier_lo, tier_hi = ci.interval(test[cols])
         reg_ci[task] = ci
@@ -1496,6 +1499,7 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
                 "previous_value_eur": round(float(np.expm1(r["log_last"])), 2),
                 "forecast_value_eur": round(float(reg_pred["forecast"][k]), 2),
                 "forecast_range_eur": [round(float(fc_lo[k]), 2), round(float(fc_hi[k]), 2)],
+                "linear_value_eur": round(float(linear_pred[k]), 2),
                 "forecast_residual_eur": round(
                     float(reg_pred["forecast"][k] - r["target_value"]), 2
                 ),

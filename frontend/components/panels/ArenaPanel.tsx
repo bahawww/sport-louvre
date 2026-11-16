@@ -1,6 +1,7 @@
 "use client";
 
 import type { OverviewResponse, TestPredictionsResponse } from "@/lib/api";
+import { COURSE_CLASSIFIER, COURSE_REGRESSOR } from "@/lib/models";
 import { fmt, toTrendModel, TREND_META } from "@/lib/format";
 import {
   PageHeader,
@@ -175,6 +176,10 @@ export function ArenaPanel({
   const trend = cls.trend;
   const tasks = overview.regression.tasks;
   const fc = tasks?.forecast.headline;
+  const mainClf = trend?.models.find((m) => m.name === COURSE_CLASSIFIER);
+  const mainReg = tasks?.forecast.models.find((m) => m.name === COURSE_REGRESSOR);
+  const trendAcc = mainClf?.accuracy ?? trend?.headline.metrics.accuracy ?? 0;
+  const priceMiss = mainReg?.medape ?? fc?.metrics.medape ?? 0;
   const ov = preds.outlook?.validation;
   const cleanBest = cls.clean_mode.models.find((m) => m.name === cls.clean_mode.best_model) ?? cls.clean_mode.models[0];
   const leakBest = toTrendModel(
@@ -186,19 +191,18 @@ export function ArenaPanel({
     trend && {
       title: "Menebak tren pemain",
       question: "Di update berikutnya, pemain ini masih dekat puncak, stabil, menurun, atau jatuh?",
-      figure: outOf(trend.headline.metrics.accuracy, 100),
+      figure: outOf(trendAcc, 100),
       unit: "pemain tertebak benar",
       base: `Tanpa model: ${outOf(trend.headline.persistence.accuracy, 100)}`,
-      v: verdict(trend.headline.metrics.accuracy / trend.headline.persistence.accuracy - 1),
+      v: verdict(trendAcc / trend.headline.persistence.accuracy - 1),
     },
     fc && {
       title: "Menebak harga berikutnya",
       question: "Berapa nilai pasarnya di update harga berikutnya?",
-      figure: pct1(fc.metrics.medape),
+      figure: pct1(priceMiss),
       unit: "biasanya meleset dari harga asli",
       base: `Tanpa model: meleset ${pct1(fc.naive_last_value.medape)}`,
-      // Mixed evidence (better on the typical miss, not on the average miss in euros): never more than "almost equal".
-      v: verdict(fc.beats_naive_eur ? 1 - fc.metrics.medape / fc.naive_last_value.medape : Math.min(0.02, 1 - fc.metrics.medape / fc.naive_last_value.medape)),
+      v: verdict(1 - priceMiss / fc.naive_last_value.medape),
     },
     ov && {
       title: "Menebak arah setahun ke depan",
@@ -231,7 +235,7 @@ export function ArenaPanel({
           key: `${task}-${m.name}`,
           task: TASK_LABEL[task] ?? task,
           name: m.name,
-          isBest: m.name === block.best_model,
+          isBest: m.name === (task === "forecast" && mainReg ? COURSE_REGRESSOR : block.best_model),
           r2: m.r2.toFixed(3),
           r2_log: m.r2_log !== undefined && m.r2_log !== null ? m.r2_log.toFixed(3) : "-",
           mae: fmt.eur(m.mae),
@@ -336,15 +340,19 @@ export function ArenaPanel({
                 name: (MODEL_NAME[m.name] ?? { name: m.name }).name,
                 note: (MODEL_NAME[m.name] ?? { note: "" }).note,
                 value: m.accuracy,
-                chosen: m.name === trend?.best_model,
+                chosen: m.name === COURSE_CLASSIFIER,
                 baseline: m.name.startsWith("Persistence"),
               }))}
-              noise={trend?.validation.group_kfold[trend.best_model]?.accuracy_std ?? 0}
+              noise={
+                trend?.validation.group_kfold[COURSE_CLASSIFIER]?.accuracy_std ??
+                trend?.validation.group_kfold[trend.best_model]?.accuracy_std ??
+                0
+              }
             />
           </div>
           <p className="mt-4 text-[13px] leading-relaxed text-muted">
-            Model yang dipakai dipilih karena peluang yang diberikannya paling bisa dipercaya, bukan karena akurasinya paling
-            tinggi. Pemilihan dilakukan sebelum melihat data uji.
+            Pohon keputusan dijadikan model utama klasifikasi karena ketentuan tugas, bukan karena skornya paling tinggi.
+            Tab Simulasi tetap memakai gradient boosting terkalibrasi, yang peluangnya paling bisa dipercaya.
           </p>
         </Panel>
 

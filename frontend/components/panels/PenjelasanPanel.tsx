@@ -456,7 +456,7 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
     {
       stage: "Pilih jenis model",
       code: "GroupKFold(5)",
-      does: `${candidates} kandidat dibandingkan lewat validasi silang di pemain latih saja. Data uji tidak disentuh. Terpilih: ${clean.best_model} untuk tren, ${tasks?.forecast.best_model ?? "-"} untuk harga.`,
+      does: `${candidates} kandidat dibandingkan lewat validasi silang di pemain latih saja. Data uji tidak disentuh. Model utama sesuai ketentuan tugas: pohon keputusan untuk tren, regresi linear untuk harga. Validasi silang sendiri mengunggulkan ${clean.best_model} dan ${tasks?.forecast.best_model ?? "-"}, yang tetap dipakai simulator.`,
       figure: num(candidates),
       unit: "kandidat",
     },

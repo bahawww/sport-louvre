@@ -231,6 +231,8 @@ export interface TestPredictionRow {
   fair_value_range_eur?: [number, number];
   previous_value_eur?: number;
   forecast_value_eur?: number;
+  /** Linear Regression candidate on the forecast task. Display only, never served. */
+  linear_value_eur?: number;
   forecast_range_eur?: [number, number];
   forecast_residual_eur?: number;
   pred_trajectory_confidence?: number;

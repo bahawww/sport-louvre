@@ -724,6 +724,14 @@ def test_readable_models_are_reported_and_do_not_replace_the_served_ones(art):
         assert "Linear Regression (log)" in {m["name"] for m in block["models"]}
         assert block["best_model"] == "HistGradientBoosting (log)"
 
+    # The linear candidate's own predictions travel with the test rows for the diagnostics chart.
+    rows = art.test_predictions["rows"]
+    lin_row = next(
+        m for m in o["regression"]["tasks"]["forecast"]["models"] if m["name"] == "Linear Regression (log)"
+    )
+    err = np.array([abs(r["linear_value_eur"] - r["actual_value_eur"]) for r in rows])
+    assert err.mean() == pytest.approx(lin_row["mae"], rel=1e-3)
+
     lin = o["simple_models"]["linear_regression"]
     assert 20 < lin["peak_age"] < 32
     assert lin["position_premium_pct"]["Forward"] > 0  # outfield attackers cost more than keepers

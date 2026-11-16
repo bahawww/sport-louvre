@@ -2,6 +2,7 @@
 
 import { Panel, SectionHeader } from "@/components/ui";
 import type { OverviewResponse } from "@/lib/api";
+import { COURSE_CLASSIFIER, COURSE_REGRESSOR } from "@/lib/models";
 
 type Simple = NonNullable<OverviewResponse["simple_models"]>;
 type TreeNode = Simple["decision_tree"]["nodes"][number];
@@ -331,7 +332,7 @@ export function ModelExplainer({ overview }: { overview: OverviewResponse }) {
         <SectionHeader
           as="h2"
           title="Model yang dipakai"
-          subtitle="Situs ini menjawab dua pertanyaan. Klasifikasi: tren harga pemain masuk kelompok mana. Prediksi: berapa harga di update berikutnya. Tiap pertanyaan dicoba dengan beberapa jenis model, lalu satu dipilih lewat validasi silang."
+          subtitle="Situs ini menjawab dua pertanyaan. Klasifikasi: tren harga pemain masuk kelompok mana. Prediksi: berapa harga di update berikutnya. Tiap pertanyaan dicoba dengan beberapa jenis model. Model utamanya pohon keputusan dan regresi linear, sesuai ketentuan tugas."
           className="mb-4"
         />
         <div className="grid gap-6 lg:grid-cols-2">
@@ -341,10 +342,10 @@ export function ModelExplainer({ overview }: { overview: OverviewResponse }) {
               Jawabannya satu dari empat kelompok: naik, stabil, menurun, jatuh tajam. Angka di kanan adalah porsi pemain uji
               yang tertebak benar. Tanpa model hasilnya {pct1(persistence)}.
             </p>
-            <ModelList rows={clfRows} chosen={trend.best_model} scoreLabel="Benar" />
+            <ModelList rows={clfRows} chosen={COURSE_CLASSIFIER} scoreLabel="Benar" />
             <p className="mt-2 text-xs leading-relaxed text-muted">
-              Model dipilih dari peluangnya yang paling bisa dipercaya di validasi silang, bukan dari angka benar di data uji.
-              Karena itu model lain boleh sama tinggi di kolom ini tanpa terpilih.
+              Pohon keputusan dipakai karena ketentuan tugas, bukan karena skornya paling tinggi. Di validasi silang,
+              peluang dari gradient boosting berurutan lebih bisa dipercaya, jadi tab Simulasi tetap memakai model itu.
             </p>
           </div>
           <div>
@@ -353,7 +354,7 @@ export function ModelExplainer({ overview }: { overview: OverviewResponse }) {
               Jawabannya angka dalam euro. Angka di kanan adalah meleset tengah: separuh tebakan meleset kurang dari itu.
               Makin kecil makin baik.
             </p>
-            <ModelList rows={regRows} chosen={forecast.best_model} scoreLabel="Meleset tengah" />
+            <ModelList rows={regRows} chosen={COURSE_REGRESSOR} scoreLabel="Meleset tengah" />
           </div>
         </div>
       </Panel>
@@ -409,7 +410,7 @@ export function ModelExplainer({ overview }: { overview: OverviewResponse }) {
             <TreeDiagram nodes={tree.nodes} />
             <p className="mt-4 text-xs leading-relaxed text-muted">
               Pohon ini benar {pct1(tree.accuracy_test)} pada {num(tree.test_players)} pemain uji. Tanpa model{" "}
-              {pct1(persistence)}, model yang dipakai {pct1(trend.headline.metrics.accuracy)}. Angka di tiap kotak: jumlah pemain
+              {pct1(persistence)}, gradient boosting {pct1(trend.headline.metrics.accuracy)}. Angka di tiap kotak: jumlah pemain
               latih yang sampai di situ, dan berapa persen yang memang masuk kelompok itu. Cabang yang ujungnya sama sudah digabung. Batas yang ditemukan pohon hampir sama
               dengan definisi kelompoknya sendiri (turun 20%, 30%, dan 60% dari puncak): tren pemain jarang pindah kelompok
               dalam satu update, dan itu sebabnya tebakan tanpa model sudah tinggi.

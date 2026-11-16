@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Badge, Button, Panel, SectionHeader } from "@/components/ui";
 import type { OverviewResponse, SimulateResponse } from "@/lib/api";
 import { fmt } from "@/lib/format";
+import { COURSE_CLASSIFIER, COURSE_REGRESSOR } from "@/lib/models";
 import { cn } from "@/lib/utils";
 
 import { WorkflowCanvas } from "./WorkflowCanvas";
@@ -257,13 +258,14 @@ function Illustration({
         <p className="mb-2 text-[13px] text-muted">Galat peluang (log-loss) di validasi silang. Makin kecil makin baik.</p>
         <ul className="space-y-2.5">
           {rows.map((r) => {
-            const chosen = r.name === clean.best_model;
+            const chosen = r.name === COURSE_CLASSIFIER;
+            const bestCv = r.name === clean.best_model;
             return (
               <li key={r.name} className="text-[13px]">
                 <div className="flex items-baseline justify-between gap-3">
                   <span className={chosen ? "font-semibold text-ink" : "text-muted"}>
                     {r.name.startsWith("Persistence") ? "Tanpa model" : r.name}
-                    {chosen ? " (terpilih)" : ""}
+                    {chosen ? " (model utama)" : bestCv ? " (terbaik di validasi)" : ""}
                   </span>
                   <span className="tabular-nums text-muted">{r.loss.toFixed(3).replace(".", ",")}</span>
                 </div>
@@ -285,7 +287,7 @@ function Illustration({
             <p className="mb-1 text-[13px] text-muted">Kandidat model harga, R² log di validasi silang. Makin besar makin baik.</p>
             <Rows
               rows={priceCv.map(([name, m]): [string, string] => [
-                `${name.startsWith("Naive") ? "Tanpa model" : name.replace(" (log)", "")}${name === forecast?.best_model ? " (terpilih)" : ""}`,
+                `${name.startsWith("Naive") ? "Tanpa model" : name.replace(" (log)", "")}${name === COURSE_REGRESSOR ? " (model utama)" : name === forecast?.best_model ? " (terbaik di validasi)" : ""}`,
                 m.r2_log_mean.toFixed(3).replace(".", ","),
               ])}
             />

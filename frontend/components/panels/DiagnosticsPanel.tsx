@@ -17,6 +17,7 @@ import {
 } from "@/components/ui";
 import type { OverviewResponse, TestPredictionRow, TestPredictionsResponse } from "@/lib/api";
 import { fmt, toTrendModel, trajectoryLabel, TREND_META } from "@/lib/format";
+import { COURSE_CLASSIFIER, COURSE_REGRESSOR } from "@/lib/models";
 import { cn } from "@/lib/utils";
 
 function TrendBadge({
@@ -58,6 +59,7 @@ const MODE_OPTIONS = [
 ] as const;
 
 const VALUE_MODEL_OPTIONS = [
+  { value: "linear", label: "Regresi Linear" },
   { value: "forecast", label: "Forecast" },
   { value: "fundamental", label: "Fundamental" },
 ] as const;
@@ -72,21 +74,25 @@ export function DiagnosticsPanel({
   preds: TestPredictionsResponse;
 }) {
   const [mode, setMode] = useState<"clean" | "leakage">("clean");
-  const [modelIdx, setModelIdx] = useState(() =>
-    Math.max(
+  const [modelIdx, setModelIdx] = useState(() => {
+    const list = overview.classification.trend?.models ?? overview.classification.clean_mode.models;
+    const preferred = list.findIndex((m) => m.name === COURSE_CLASSIFIER);
+    return Math.max(
       0,
-      overview.classification.clean_mode.models.findIndex(
-        (m) => m.name === overview.classification.clean_mode.best_model,
-      ),
-    ),
-  );
+      preferred >= 0
+        ? preferred
+        : list.findIndex((m) => m.name === overview.classification.clean_mode.best_model),
+    );
+  });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [page, setPage] = useState(0);
-  const [valueModel, setValueModel] = useState<"forecast" | "fundamental">("forecast");
+  const [valueModel, setValueModel] = useState<"linear" | "forecast" | "fundamental">("linear");
   const tasks = overview.regression.tasks;
-  const activeTask = tasks?.[valueModel];
-  const activeReg = activeTask?.models.find((m) => m.name === activeTask.best_model);
+  const activeTask = tasks?.[valueModel === "linear" ? "forecast" : valueModel];
+  const activeReg = activeTask?.models.find(
+    (m) => m.name === (valueModel === "linear" ? COURSE_REGRESSOR : activeTask.best_model),
+  );
   const cleanBlock = overview.classification.clean_mode as typeof overview.classification.clean_mode & {
     validation?: { group_kfold: Record<string, Record<string, number>> };
   };
@@ -122,7 +128,11 @@ export function DiagnosticsPanel({
   const scatterOption = useMemo(() => {
     const rows = preds.rows;
     const predOf = (r: (typeof rows)[number]) =>
-      valueModel === "forecast" ? (r.forecast_value_eur ?? r.pred_value_eur) : r.pred_value_eur;
+      valueModel === "linear"
+        ? (r.linear_value_eur ?? r.forecast_value_eur ?? r.pred_value_eur)
+        : valueModel === "forecast"
+          ? (r.forecast_value_eur ?? r.pred_value_eur)
+          : r.pred_value_eur;
     const maxVal = Math.max(...rows.map((r) => Math.max(r.actual_value_eur, predOf(r))), 100_000_000);
     const minVal = Math.max(
       10_000,
@@ -526,13 +536,15 @@ export function DiagnosticsPanel({
               }
             />
             <p className="mt-2 text-[13px] text-muted leading-relaxed">
-              {valueModel === "forecast"
-                ? "Menebak update berikutnya dari harga sebelumnya."
-                : "Nilai wajar tanpa harga 12 bulan terakhir."}
+              {valueModel === "linear"
+                ? "Regresi linear menebak update berikutnya dari harga sebelumnya. Dijadikan tampilan awal karena ketentuan tugas, bukan karena paling akurat."
+                : valueModel === "forecast"
+                  ? "Gradient boosting menebak update berikutnya dari harga sebelumnya."
+                  : "Nilai wajar tanpa harga 12 bulan terakhir."}
               {activeReg
                 ? ` R² ${activeReg.r2.toFixed(3)} · R² log ${activeReg.r2_log?.toFixed(3) ?? "-"} · MAE ${fmt.eur(activeReg.mae)}.`
                 : ""}{" "}
-              {valueModel === "forecast" && tasks?.forecast.headline
+              {valueModel !== "fundamental" && tasks?.forecast.headline
                 ? `Baseline naif (harga terakhir): R² log ${tasks.forecast.headline.naive_last_value.r2_log.toFixed(3)}. `
                 : ""}
               Skala log. Hijau = prediksi lebih dari 25% di atas aktual, merah = lebih dari 20% di
