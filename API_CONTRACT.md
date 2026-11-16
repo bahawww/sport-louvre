@@ -37,6 +37,7 @@ every field that existed before is still present with the same type.
 - **new** `outlook`: evaluation of the 12-month outlook model: `{ task, threshold, min_value_eur, train_rows, validation }`,
   `validation` holds hit rates plus `deciles[]`, `threshold_sweep[]`, `calibration{p_up,p_down}`, `by_age[]`, `by_value_tier[]`, `feature_importance[]`.
 - **new** `leak_audit`: `{ finding, rule, rule_accuracy, share_players_target_exposed, target_equals_csv_peak_when_exposed, contamination_test, previous_pipeline }`.
+- **new** `simple_models`: `{ linear_regression, decision_tree }`. Two readable models for the Penjelasan tab, not used for serving. `linear_regression` has `position_premium_pct`, `league_premium_pct`, `age_effect_pct`, `peak_age`, `r2_log_test`; `decision_tree` has `nodes[] { id, leaf, feature, threshold, yes, no, players, majority, majority_share }` and `accuracy_test`. Model lists also gain `Decision Tree` (classification) and `Linear Regression (log)` (regression).
 - **new** `data_card`: `{ source, players, valuation_points, first_valuation, data_as_of, population, unit, label, repairs, known_gaps[], intended_use, not_for }`.
 - **new** `model_card`: `{ version, trained_at, python, scikit_learn, seed, models, training_seconds, tests }`.
 - **new** `out_of_time`: `{ cutoff, train_rows, sets: { unseen_players_future, seen_players_future } }`,

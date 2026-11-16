@@ -94,7 +94,17 @@ depreciation-risk signals fell (base rates 48% / 42%).
 ### Classification
 Ordinal (Frank & Hall) decomposition of the five ordered classes over HistGradientBoosting, each
 cumulative model calibrated isotonic out-of-fold with folds grouped by player. Compared with
-calibrated multinomial HGB, Logistic Regression, Random Forest and a persistence baseline.
+calibrated multinomial HGB, Logistic Regression, Random Forest, a depth-5 Decision Tree and a
+persistence baseline. Regression candidates per task: HistGradientBoosting, Ridge and plain
+Linear Regression, all on a log target relative to an anchor price, plus the naive last value.
+
+`overview.simple_models` holds two small models meant to be read, not served (2026-11-16):
+- **Linear regression** of log current value on age, age squared, position group and league.
+  It gives position and league premiums and a peak age (25.1). Test R² log is 0.23, so it
+  describes the dataset and is no price estimate.
+- **Decision tree** of depth 3 on six plain features for the 4-class trend: 0.833 on the holdout
+  against 0.829 for persistence. Its splits land on drawdowns of 18%, 29%, 51% and 60%, close to
+  the label definition (20/30/60), which is why persistence is already strong.
 
 ### Accuracy ceiling of the 5-class label (tested 2026-11-14)
 Grouped CV accuracy is about 0.71 against 0.66 for persistence, and these attempts did not move it

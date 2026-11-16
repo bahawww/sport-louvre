@@ -136,6 +136,38 @@ export interface OverviewResponse {
       feature_importance?: FeatureImportanceItem[];
     };
   };
+  simple_models?: {
+    linear_regression: {
+      train_players: number;
+      test_players: number;
+      r2_log_test: number;
+      median_abs_pct_error_test: number;
+      peak_age: number | null;
+      age_effect_pct: { age: number; vs_peak_pct: number }[];
+      position_reference: string;
+      position_premium_pct: Record<string, number>;
+      league_reference: string;
+      league_premium_pct: Record<string, number>;
+    };
+    decision_tree: {
+      features: string[];
+      max_depth: number;
+      train_players: number;
+      test_players: number;
+      accuracy_test: number;
+      nodes: {
+        id: number;
+        leaf: boolean;
+        feature: string | null;
+        threshold: number | null;
+        yes: number | null;
+        no: number | null;
+        players: number;
+        majority: string;
+        majority_share: number;
+      }[];
+    };
+  };
   leak_audit?: {
     rule_accuracy: number;
     share_players_target_exposed: number;

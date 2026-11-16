@@ -36,7 +36,7 @@ from sklearn.ensemble import (
     RandomForestClassifier,
 )
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LogisticRegression, Ridge
+from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
@@ -51,6 +51,7 @@ from sklearn.metrics import (
 from sklearn.model_selection import GroupKFold, GroupShuffleSplit, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
+from sklearn.tree import DecisionTreeClassifier
 
 import evaluation as ev
 from features import (
@@ -649,6 +650,15 @@ def classifier_specs(num: list[str], cat: list[str], full: bool = True) -> dict[
                 ),
             ]
         )
+        specs["Decision Tree"] = Pipeline(
+            [
+                ("prep", _linear_prep(num, cat)),
+                (
+                    "model",
+                    DecisionTreeClassifier(max_depth=5, min_samples_leaf=40, random_state=SEED),
+                ),
+            ]
+        )
         specs["Persistence (last state)"] = PersistenceClassifier()
     return specs
 
@@ -665,10 +675,123 @@ def regressor_specs(task: str) -> dict[str, Any]:
         "Ridge (log)": AnchoredLogRegressor(
             Pipeline([("prep", _linear_prep(num, cat)), ("model", Ridge(alpha=1.0))]), anchor
         ),
+        "Linear Regression (log)": AnchoredLogRegressor(
+            Pipeline([("prep", _linear_prep(num, cat)), ("model", LinearRegression())]), anchor
+        ),
     }
     if task == "forecast":
         specs["Naive (last value)"] = NaiveAnchorRegressor("log_last")
     return specs
+
+
+# --------------------------------------------------------------------------- readable models
+
+TREE_FEATURES = ["dd_last", "ret1", "age", "yrs_since_peak", "range_pos", "n_points"]
+LEAGUE_REFERENCE = "Ligue 1"
+POSITION_REFERENCE = "Goalkeeper"
+
+
+def simple_models(df: pd.DataFrame, train: pd.DataFrame, test: pd.DataFrame) -> dict[str, Any]:
+    """Two small models a person can read, each answering one question about the dataset.
+
+    They are not served for prediction. The linear regression prices a player from profile
+    alone (age, position group, league); the decision tree guesses the 4-class trend from six
+    plain features. Both are fitted on training players and scored on the test players.
+    """
+    test_ids = set(test["player_id"])
+    prof = df[["player_id", "age", "position_group", "league_name", "current_value_eur"]].dropna()
+    prof = prof[prof["current_value_eur"] > 0]
+
+    def design(frame: pd.DataFrame) -> pd.DataFrame:
+        out = pd.DataFrame({"age": frame["age"], "age_sq": frame["age"] ** 2}, index=frame.index)
+        for g in POSITION_GROUPS:
+            if g != POSITION_REFERENCE:
+                out[f"pos_{g}"] = (frame["position_group"] == g).astype(float)
+        for lg in leagues:
+            if lg != LEAGUE_REFERENCE:
+                out[f"league_{lg}"] = (frame["league_name"] == lg).astype(float)
+        return out
+
+    leagues = sorted(prof["league_name"].unique())
+    p_train, p_test = prof[~prof["player_id"].isin(test_ids)], prof[prof["player_id"].isin(test_ids)]
+    lin = LinearRegression().fit(design(p_train), np.log(p_train["current_value_eur"]))
+    coef = dict(zip(design(p_train).columns, lin.coef_))
+    pred = lin.predict(design(p_test))
+    y_log = np.log(p_test["current_value_eur"].to_numpy())
+    r2 = 1.0 - float(((y_log - pred) ** 2).sum() / ((y_log - y_log.mean()) ** 2).sum())
+    peak_age = float(-coef["age"] / (2 * coef["age_sq"])) if coef["age_sq"] < 0 else None
+
+    def age_curve(a: float) -> float:
+        return coef["age"] * a + coef["age_sq"] * a * a
+
+    top = age_curve(peak_age) if peak_age else age_curve(26.0)
+    linear = {
+        "use_case": "price_from_profile",
+        "target": "log(current_value_eur)",
+        "features": ["age", "age squared", "position_group", "league_name"],
+        "train_players": int(len(p_train)),
+        "test_players": int(len(p_test)),
+        "r2_log_test": round(r2, 4),
+        "median_abs_pct_error_test": round(
+            float(np.median(np.abs(np.exp(pred) / p_test["current_value_eur"].to_numpy() - 1.0))), 4
+        ),
+        "peak_age": None if peak_age is None else round(peak_age, 1),
+        "age_effect_pct": [
+            {"age": a, "vs_peak_pct": round(float(np.exp(age_curve(a) - top) - 1.0) * 100, 1)}
+            for a in range(18, 37, 2)
+        ],
+        "position_reference": POSITION_REFERENCE,
+        "position_premium_pct": {
+            g: round(float(np.exp(coef[f"pos_{g}"]) - 1.0) * 100, 1)
+            for g in POSITION_GROUPS
+            if g != POSITION_REFERENCE
+        },
+        "league_reference": LEAGUE_REFERENCE,
+        "league_premium_pct": {
+            lg: round(float(np.exp(coef[f"league_{lg}"]) - 1.0) * 100, 1)
+            for lg in leagues
+            if lg != LEAGUE_REFERENCE
+        },
+    }
+
+    fit_rows = train[train["is_final"]]
+    med = fit_rows[TREE_FEATURES].median()
+    tree = DecisionTreeClassifier(max_depth=3, min_samples_leaf=50, random_state=SEED).fit(
+        fit_rows[TREE_FEATURES].fillna(med), trend_labels(fit_rows["label"])
+    )
+    t = tree.tree_
+    nodes = []
+    for i in range(t.node_count):
+        counts = t.value[i][0]
+        leaf = t.children_left[i] == -1
+        nodes.append(
+            {
+                "id": i,
+                "leaf": bool(leaf),
+                "feature": None if leaf else TREE_FEATURES[t.feature[i]],
+                "threshold": None if leaf else round(float(t.threshold[i]), 3),
+                "yes": None if leaf else int(t.children_left[i]),  # feature <= threshold
+                "no": None if leaf else int(t.children_right[i]),
+                "players": int(t.n_node_samples[i]),
+                "majority": str(tree.classes_[int(np.argmax(counts))]),
+                "majority_share": round(float(counts.max() / counts.sum()), 3),
+            }
+        )
+    tree_pred = tree.predict(test[TREE_FEATURES].fillna(med))
+    y_trend = trend_labels(test["label"])
+    return {
+        "linear_regression": linear,
+        "decision_tree": {
+            "use_case": "trend_rules",
+            "target": "trend (4 classes)",
+            "features": TREE_FEATURES,
+            "max_depth": 3,
+            "train_players": int(len(fit_rows)),
+            "test_players": int(len(test)),
+            "accuracy_test": round(float((tree_pred == y_trend).mean()), 4),
+            "nodes": nodes,
+        },
+    }
 
 
 # --------------------------------------------------------------------------- metrics
@@ -1669,6 +1792,7 @@ def train_all(log: Callable[[str], None] = print) -> DashboardArtifacts:
             "validation": outlook_validation,
         },
         "leak_audit": leak_audit,
+        "simple_models": simple_models(df, train, test),
         "data_card": {
             "source": "Transfermarkt market values (original 508-player set + salimt/football-datasets)",
             "players": int(len(df)),

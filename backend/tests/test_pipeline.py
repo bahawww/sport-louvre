@@ -712,3 +712,25 @@ def test_simulate_answers_repeats_from_cache_and_stays_single_threaded(client, a
     other = client.post("/api/simulate", json={"player_id": pid, "scenario": {"horizon_years": 1.0}}).json()
     assert len(calls) == 2 and other["horizon_years"] != first["horizon_years"]
     assert len(main._SIM_CACHE) <= main._SIM_CACHE_MAX
+
+
+def test_readable_models_are_reported_and_do_not_replace_the_served_ones(art):
+    o = art.overview
+    assert o["classification"]["clean_mode"]["best_model"] == "Ordinal HGB (calibrated)"
+    names = {m["name"] for m in o["classification"]["trend"]["models"]}
+    assert "Decision Tree" in names
+    for task in ("forecast", "fundamental"):
+        block = o["regression"]["tasks"][task]
+        assert "Linear Regression (log)" in {m["name"] for m in block["models"]}
+        assert block["best_model"] == "HistGradientBoosting (log)"
+
+    lin = o["simple_models"]["linear_regression"]
+    assert 20 < lin["peak_age"] < 32
+    assert lin["position_premium_pct"]["Forward"] > 0  # outfield attackers cost more than keepers
+    assert 0 < lin["r2_log_test"] < 0.9
+
+    tree = o["simple_models"]["decision_tree"]
+    by_id = {n["id"]: n for n in tree["nodes"]}
+    assert all(n["majority"] in features.TREND_CLASSES for n in tree["nodes"])
+    assert all(by_id[n["yes"]] and by_id[n["no"]] for n in tree["nodes"] if not n["leaf"])
+    assert tree["accuracy_test"] > 0.6

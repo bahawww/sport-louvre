@@ -1,6 +1,6 @@
 # Metrics report: before vs after
 
-Model version `3ba511f7e869231b`, trained 2026-11-16T04:01:11+00:00 (scikit-learn 1.6.1, seed 42). Data as of 2026-02-11: 2418 players, 47903 valuations since 2004-10-03.
+Model version `6051c7126ce52744`, trained 2026-11-16T11:00:51+00:00 (scikit-learn 1.6.1, seed 42). Data as of 2026-02-11: 2418 players, 47903 valuations since 2004-10-03.
 
 ## 0. Headline: model vs baseline
 
@@ -50,6 +50,7 @@ rising = new record or within 20% of the career peak (rising_star + growing); st
 | HistGradientBoosting (calibrated) | 0.8450 | 0.7240 | 0.0175 | 0.2233 | 0.4123 |
 | Logistic Regression | 0.8430 | 0.6749 | 0.0302 | 0.2337 | 0.4511 |
 | Random Forest | 0.8430 | 0.6869 | 0.0235 | 0.2292 | 0.4578 |
+| Decision Tree | 0.8512 | 0.6811 | 0.0254 | 0.2275 | 0.4687 |
 | Persistence (last state) | 0.8285 | 0.6940 | 0.1030 | 0.3184 | 0.7224 |
 
 GroupKFold(5): accuracy 0.8547 ± 0.0143 (persistence 0.8319), macro-F1 0.7376. Fixed horizon: accuracy 0.8450, macro-F1 0.7082.
@@ -93,6 +94,7 @@ On this holdout the forecast model does **not** beat the naive baseline in euro 
 | Before: Linear Regression (leaky features) | 27 | €4.17M | €7.65M | 0.0478 | 0.0667 | 2.8% |
 | After: HistGradientBoosting (log) | 27 | €8.81M | €12.30M | 0.1140 | 0.1385 | 9.1% |
 | After: Ridge (log) | 27 | €8.85M | €12.22M | 0.1165 | 0.1425 | 10.1% |
+| After: Linear Regression (log) | 27 | €8.99M | €12.18M | 0.1183 | 0.1427 | 10.0% |
 | After: Naive (last value) | 27 | €7.04M | €10.63M | 0.0981 | 0.1456 | 7.7% |
 
 Tautology probe: predicting the *last known price* from the fundamental features gives R² log 0.770, median APE 36.3% (a copy of the price would give 1.0 / 0%).
@@ -103,11 +105,14 @@ Tautology probe: predicting the *last known price* from the fundamental features
 |---|---|---|---|---|---|
 | forecast | HistGradientBoosting (log) | €1.49M | 0.9768 | 0.2340 ± 0.0210 | 0.9738 |
 | forecast | Ridge (log) | €1.70M | 0.9703 | 0.2461 ± 0.0210 | 0.9710 |
+| forecast | Linear Regression (log) | €1.69M | 0.9704 | 0.2455 ± 0.0199 | 0.9712 |
 | forecast | Naive (last value) | €1.57M | 0.9690 | 0.2719 ± 0.0319 | 0.9641 |
 | fundamental | HistGradientBoosting (log) | €5.32M | 0.7265 | 0.7641 ± 0.0288 | 0.7228 |
 | fundamental | Ridge (log) | €5.91M | 0.6218 | 0.7935 ± 0.0276 | 0.7009 |
+| fundamental | Linear Regression (log) | €5.91M | 0.6250 | 0.7909 ± 0.0264 | 0.7028 |
 | profile | HistGradientBoosting (log) | €2.85M | 0.9072 | 0.4590 ± 0.0236 | 0.9001 |
 | profile | Ridge (log) | €3.37M | 0.8685 | 0.5254 ± 0.0216 | 0.8689 |
+| profile | Linear Regression (log) | €3.37M | 0.8684 | 0.5254 ± 0.0216 | 0.8689 |
 
 ## 4. Out-of-time validation
 
@@ -315,4 +320,4 @@ reasons = feature groups that raise this player's probability most, measured by 
 - Intended use: Shortlisting and what-if exploration for scouts and analysts.
 - Not for: Pricing a transfer, judging sporting quality, or decisions without a scout's review.
 
-Training time: 426.0 s. Panel rows used for training: 21700.
+Training time: 451.7 s. Panel rows used for training: 21700.
