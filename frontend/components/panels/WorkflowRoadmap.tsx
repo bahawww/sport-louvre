@@ -1,12 +1,14 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { Badge, Button, Panel, SectionHeader } from "@/components/ui";
 import type { OverviewResponse, SimulateResponse } from "@/lib/api";
 import { fmt } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+import { WorkflowCanvas } from "./WorkflowCanvas";
 
 export interface WorkflowStep {
   stage: string;
@@ -21,6 +23,8 @@ const PHASES = [
   { label: "Latih", from: 4, to: 7 },
   { label: "Uji dan sajikan", from: 8, to: 9 },
 ];
+
+const PHASE_DOT = ["var(--chart-3)", "var(--chart-2)", "var(--chart-1)"];
 
 const num = (x: number) => new Intl.NumberFormat("id-ID").format(Math.round(x));
 const pct0 = (x: number) => `${Math.round(x * 100)}%`;
@@ -244,6 +248,10 @@ function Illustration({
       .map(([name, m]) => ({ name, loss: m.log_loss_mean }))
       .sort((a, b) => a.loss - b.loss);
     const max = Math.max(...rows.map((r) => r.loss), 1);
+    const forecast = overview.regression.tasks?.forecast;
+    const priceCv = Object.entries(forecast?.validation.group_kfold ?? {})
+      .filter(([, m]) => typeof m.r2_log_mean === "number")
+      .sort((x, y) => y[1].r2_log_mean - x[1].r2_log_mean);
     return (
       <div>
         <p className="mb-2 text-[13px] text-muted">Galat peluang (log-loss) di validasi silang. Makin kecil makin baik.</p>
@@ -272,6 +280,17 @@ function Illustration({
             );
           })}
         </ul>
+        {priceCv.length ? (
+          <div className="mt-4">
+            <p className="mb-1 text-[13px] text-muted">Kandidat model harga, R² log di validasi silang. Makin besar makin baik.</p>
+            <Rows
+              rows={priceCv.map(([name, m]): [string, string] => [
+                `${name.startsWith("Naive") ? "Tanpa model" : name.replace(" (log)", "")}${name === forecast?.best_model ? " (terpilih)" : ""}`,
+                m.r2_log_mean.toFixed(3).replace(".", ","),
+              ])}
+            />
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -365,26 +384,10 @@ export function WorkflowRoadmap({
   sim?: SimulateResponse;
 }) {
   const [active, setActive] = useState(0);
-  const tablistRef = useRef<HTMLDivElement>(null);
   const last = steps.length - 1;
   const step = steps[active];
   const phase = PHASES.find((p) => active >= p.from && active <= p.to)!;
   const go = (i: number) => setActive(Math.max(0, Math.min(last, i)));
-
-  useEffect(() => {
-    const container = tablistRef.current;
-    if (!container) return;
-    const selectedBtn = container.querySelector('[aria-selected="true"]') as HTMLElement | null;
-    if (selectedBtn) {
-      const btnLeft = selectedBtn.offsetLeft;
-      const btnRight = btnLeft + selectedBtn.offsetWidth;
-      const cLeft = container.scrollLeft;
-      const cRight = cLeft + container.clientWidth;
-      if (btnLeft < cLeft || btnRight > cRight) {
-        selectedBtn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-      }
-    }
-  }, [active]);
 
   return (
     <Panel as="section" padding="none" surface="default" className="overflow-hidden">
@@ -392,7 +395,7 @@ export function WorkflowRoadmap({
         <SectionHeader
           as="h2"
           title="Alur kerja dari CSV sampai model"
-          subtitle="Sepuluh tahap yang dijalankan tiap kali model dilatih. Pilih satu tahap untuk melihat apa yang terjadi pada data."
+          subtitle="Sepuluh tahap yang dijalankan tiap kali model dilatih, digambar sebagai rangkaian kotak kerja yang saling tersambung. Klik satu lingkaran untuk melihat apa yang terjadi pada data di tahap itu."
           actions={
             <Badge variant="neutral" size="sm">
               {active + 1} dari {steps.length}
@@ -402,83 +405,15 @@ export function WorkflowRoadmap({
       </div>
 
       <div className="border-b border-border bg-ground/40 p-3 sm:p-4">
-        {/* Phase headers for desktop */}
-        <div className="hidden sm:grid grid-cols-10 gap-1.5 mb-2 text-xs text-muted">
-          {PHASES.map((p) => (
-            <div
-              key={p.label}
-              style={{ gridColumn: `${p.from + 1} / ${p.to + 2}` }}
-              className={cn(
-                "border-l border-rule pl-2 font-medium truncate transition-colors",
-                phase === p ? "text-ink" : "text-faint"
-              )}
-            >
+        <div className="mb-1 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted">
+          {PHASES.map((p, k) => (
+            <span key={p.label} className={cn("inline-flex items-center gap-1.5", phase === p ? "text-ink font-medium" : "")}>
+              <span className="size-2.5 rounded-full" style={{ background: PHASE_DOT[k] }} />
               {p.label}
-            </div>
+            </span>
           ))}
         </div>
-
-        {/* Phase label for mobile */}
-        <div className="sm:hidden flex items-center justify-between pb-2 text-xs text-muted">
-          <span>
-            Fase: <strong className="text-ink font-medium">{phase.label}</strong>
-          </span>
-          <span className="tabular-nums">
-            Langkah {active + 1} dari {steps.length}
-          </span>
-        </div>
-
-        {/* Accessible step selector */}
-        <div
-          ref={tablistRef}
-          role="tablist"
-          aria-label="Tahap alur kerja"
-          onKeyDown={(e) => {
-            if (e.key === "ArrowRight") {
-              e.preventDefault();
-              go(active + 1);
-            }
-            if (e.key === "ArrowLeft") {
-              e.preventDefault();
-              go(active - 1);
-            }
-          }}
-          className="flex sm:grid sm:grid-cols-10 gap-1.5 overflow-x-auto pb-1 sm:pb-0 scroll-smooth [scrollbar-width:thin]"
-        >
-          {steps.map((s, i) => {
-            const isCurrent = i === active;
-            const isPast = i < active;
-            return (
-              <button
-                key={s.stage}
-                role="tab"
-                type="button"
-                aria-selected={isCurrent}
-                tabIndex={isCurrent ? 0 : -1}
-                onClick={() => go(i)}
-                className={cn(
-                  "flex flex-col items-center justify-center gap-1 rounded-control border px-2 py-1.5 transition-colors shrink-0",
-                  "min-w-[92px] sm:min-w-0 sm:flex-1",
-                  "min-h-[44px] lg:min-h-[38px]",
-                  "outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none",
-                  isCurrent
-                    ? "bg-active border-control text-ink font-medium"
-                    : "bg-raised border-border text-muted hover:text-ink"
-                )}
-              >
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-semibold tabular-nums">{i + 1}</span>
-                  {isPast ? (
-                    <span className="size-1.5 rounded-full bg-positive inline-block" />
-                  ) : null}
-                </div>
-                <span className="text-[11px] leading-tight truncate w-full text-center">
-                  {s.stage}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <WorkflowCanvas active={active} onSelect={go} />
       </div>
 
       <div

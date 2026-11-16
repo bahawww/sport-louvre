@@ -20,6 +20,7 @@ const MODEL_NAME: Record<string, { name: string; note: string }> = {
   "HistGradientBoosting (calibrated)": { name: "Gradient boosting biasa", note: "ratusan pohon keputusan kecil yang saling memperbaiki" },
   "Logistic Regression": { name: "Regresi logistik", note: "model garis lurus, paling sederhana" },
   "Random Forest": { name: "Random forest", note: "ratusan pohon keputusan yang memilih bersama" },
+  "Decision Tree": { name: "Pohon keputusan", note: "satu pohon aturan ya/tidak yang bisa dibaca" },
   "Persistence (last state)": { name: "Tanpa model", note: "menganggap tren pemain tidak berubah" },
 };
 

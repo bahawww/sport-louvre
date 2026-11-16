@@ -118,7 +118,7 @@ export default function DashboardPage() {
 
           <div className="sh-right">
             {metaText && <span className="sh-sub sh-meta">{metaText}</span>}
-            <button type="button" onClick={toggleTheme} className="sh-ibtn" aria-label="Ganti tema">
+            <button type="button" onClick={toggleTheme} className="sh-ibtn" aria-label="Ganti tema" suppressHydrationWarning>
               {isDark ? "Terang" : "Gelap"}
             </button>
           </div>

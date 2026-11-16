@@ -23,6 +23,7 @@ import {
 import { fmt, toTrendModel, TREND_META } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+import { ModelExplainer } from "./ModelExplainer";
 import { WorkflowRoadmap } from "./WorkflowRoadmap";
 
 /** The player whose real price history explains the four models. */
@@ -711,16 +712,8 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
         </div>
       </Panel>
 
-      <Panel as="section" padding="none" className="overflow-hidden">
-        <div className="p-4 sm:p-5 pb-0 sm:pb-0">
-          <SectionHeader
-            as="h2"
-            title="Alur kerja dari CSV sampai model"
-            subtitle="Sepuluh tahap yang dijalankan tiap kali model dilatih. Pilih satu tahap untuk melihat apa yang terjadi pada data."
-          />
-        </div>
-        <WorkflowRoadmap steps={workflow} overview={overview} sim={example.data} />
-      </Panel>
+      <WorkflowRoadmap steps={workflow} overview={overview} sim={example.data} />
+      <ModelExplainer overview={overview} />
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel as="section" padding="md">
