@@ -266,16 +266,12 @@ export function ScoutingSimulatorPanel() {
           return `${x.seriesName}<br/>${x.data[0]}: <strong>${fmt.eur(x.data[1])}</strong>`;
         },
       },
-      legend: {
-        bottom: 0,
-        textStyle: { color: theme.muted, fontSize: 11 },
-        itemGap: 12,
-      },
       grid: {
-        left: 56,
+        left: 8,
         right: 16,
-        top: 20,
-        bottom: 56,
+        top: 16,
+        bottom: 12,
+        containLabel: true,
       },
       xAxis: {
         type: "time",
@@ -313,7 +309,7 @@ export function ScoutingSimulatorPanel() {
       />
 
       {/* 2. Active Player Summary + Player Picker */}
-      <Panel padding="sm">
+      <Panel padding="sm" className={pickerOpen ? "relative z-20" : undefined}>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           {player ? (
             <div className="flex min-w-0 items-center gap-3">
@@ -488,9 +484,37 @@ export function ScoutingSimulatorPanel() {
           />
           <div>
             {chartOption ? (
-              <EChart option={chartOption} height={380} label="Riwayat harga dan prediksi pemain" />
+              <>
+                <EChart option={chartOption} height={340} label="Riwayat harga dan prediksi pemain" />
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block h-0.5 w-3.5 rounded-full" style={{ background: theme.chart2 }} />
+                    Riwayat
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block h-2 w-2 rounded-full border-2" style={{ borderColor: theme.chart1 }} />
+                    Prakiraan update berikutnya
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block h-3 w-0.5 rounded-full" style={{ background: theme.chart1 }} />
+                    {`Interval ${levelPct}%`}
+                  </span>
+                  {outlook && (
+                    <>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="inline-block h-2 w-2 rounded-full border-2" style={{ borderColor: theme.chart3 }} />
+                        Proyeksi 12 bulan
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="inline-block h-3 w-0.5 rounded-full" style={{ background: theme.chart3 }} />
+                        {`Rentang 12 bulan ${levelPct}%`}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </>
             ) : (
-              <div className="flex h-[380px] items-center justify-center text-[13px] text-muted">
+              <div className="flex h-[340px] items-center justify-center text-[13px] text-muted">
                 Menghitung prediksi...
               </div>
             )}

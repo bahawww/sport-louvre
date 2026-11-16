@@ -14,6 +14,7 @@ import {
   PlayerCell,
   SectionHeader,
   Segmented,
+  Select,
 } from "@/components/ui";
 import type { OverviewResponse, TestPredictionRow, TestPredictionsResponse } from "@/lib/api";
 import { fmt, toTrendModel, trajectoryLabel, TREND_META } from "@/lib/format";
@@ -148,7 +149,7 @@ export function DiagnosticsPanel({
           return `<strong>${name}</strong> (${club})<br/>Aktual: ${fmt.eur(act)}<br/>Prediksi: ${fmt.eur(prd)}<br/>Residual: ${fmt.eur(prd - act)}`;
         },
       },
-      grid: { left: 56, right: 20, top: 24, bottom: 38 },
+      grid: { left: 8, right: 16, top: 16, bottom: 20, containLabel: true },
       xAxis: {
         type: "log",
         min: minVal,
@@ -421,18 +422,17 @@ export function DiagnosticsPanel({
                     onChange={setMode}
                     ariaLabel="Pilih mode evaluasi"
                   />
-                  <select
-                    value={safeModelIdx}
-                    onChange={(e) => setModelIdx(Number(e.target.value))}
-                    aria-label="Pilih model klasifikasi"
-                    className="min-h-[44px] lg:min-h-[34px] rounded-control border border-control bg-raised px-3 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-accent"
-                  >
-                    {clsModels.map((m, i) => (
-                      <option key={m.name} value={i}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
+                  <Select
+                    value={String(safeModelIdx)}
+                    onChange={(val) => setModelIdx(Number(val))}
+                    ariaLabel="Pilih model klasifikasi"
+                    size="sm"
+                    align="right"
+                    options={clsModels.map((m, i) => ({
+                      value: String(i),
+                      label: m.name,
+                    }))}
+                  />
                 </div>
               }
             />
@@ -595,20 +595,22 @@ export function DiagnosticsPanel({
                 aria-label="Cari nama, klub, atau liga"
                 className="min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-xs text-ink placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-accent"
               />
-              <select
+              <Select
                 value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
+                onChange={(val) => {
+                  setStatusFilter(val);
                   setPage(0);
                 }}
-                aria-label="Filter status valuasi"
-                className="min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-accent"
-              >
-                <option value="ALL">Semua Status</option>
-                <option value="Undervalued">Undervalued</option>
-                <option value="Fair">Fair</option>
-                <option value="Overvalued">Overvalued</option>
-              </select>
+                ariaLabel="Filter status valuasi"
+                size="sm"
+                align="right"
+                options={[
+                  { value: "ALL", label: "Semua Status" },
+                  { value: "Undervalued", label: "Undervalued" },
+                  { value: "Fair", label: "Fair" },
+                  { value: "Overvalued", label: "Overvalued" },
+                ]}
+              />
             </div>
           }
         />

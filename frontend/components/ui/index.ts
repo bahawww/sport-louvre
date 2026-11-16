@@ -42,6 +42,7 @@ export {
 export { PlayerCell, type PlayerCellProps } from "./PlayerCell";
 export { Pagination, type PaginationProps } from "./Pagination";
 export { Disclosure, type DisclosureProps } from "./Disclosure";
+export { Select, type SelectProps, type SelectOption } from "./Select";
 export {
   Skeleton,
   PanelSkeleton,

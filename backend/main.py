@@ -4,20 +4,23 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import os
 import threading
+import time
 import zipfile
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from threadpoolctl import threadpool_limits
 from pydantic import BaseModel, Field, model_validator
 
@@ -50,15 +53,114 @@ app = FastAPI(
     title="Transfermarkt Player Trajectory & Valuation API",
     version="2.0.0",
     lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
+
+_DEFAULT_ORIGINS = [
+    "https://sport.louvre.my.id",
+    "http://127.0.0.1:8310",
+    "http://localhost:3000",
+    "http://localhost:8310",
+]
+ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("ALLOWED_ORIGINS", ",".join(_DEFAULT_ORIGINS)).split(",")
+    if o.strip()
+]
+ALLOWED_HOSTS = {urlparse(o).netloc.lower() for o in ALLOWED_ORIGINS if urlparse(o).netloc}
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
 )
+
+_RATE_LOCK = threading.Lock()
+_RATE_BUCKETS: dict[tuple[str, str], list[float]] = {}
+_RATE_LIMITS: dict[str, tuple[int, float]] = {
+    "simulate": (20, 60.0),
+    "download": (10, 60.0),
+    "api": (120, 60.0),
+}
+
+
+def _client_ip(request: Request) -> str:
+    cf_ip = request.headers.get("cf-connecting-ip", "").strip()
+    if cf_ip:
+        return cf_ip
+    xff = request.headers.get("x-forwarded-for", "").strip()
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_tier(path: str, method: str) -> str:
+    if path == "/api/simulate" and method == "POST":
+        return "simulate"
+    if path.startswith("/api/datasets/download/"):
+        return "download"
+    return "api"
+
+
+def _check_rate_limit(ip: str, tier: str) -> bool:
+    limit, window = _RATE_LIMITS[tier]
+    now = time.monotonic()
+    cutoff = now - window
+    key = (ip, tier)
+    with _RATE_LOCK:
+        if len(_RATE_BUCKETS) > 4096:
+            stale = [k for k, ts in _RATE_BUCKETS.items() if not ts or ts[-1] < cutoff]
+            for k in stale:
+                del _RATE_BUCKETS[k]
+        hits = [t for t in _RATE_BUCKETS.get(key, ()) if t > cutoff]
+        if len(hits) >= limit:
+            _RATE_BUCKETS[key] = hits
+            return False
+        hits.append(now)
+        _RATE_BUCKETS[key] = hits
+        return True
+
+
+def _origin_host(value: str | None) -> str:
+    if not value:
+        return ""
+    return urlparse(value.strip()).netloc.lower()
+
+
+@app.middleware("http")
+async def security_and_rate_limit(request: Request, call_next):
+    path = request.url.path
+    if path == "/api/health" or request.method == "OPTIONS":
+        return await call_next(request)
+
+    sec_fetch_site = request.headers.get("sec-fetch-site", "").strip().lower()
+    if sec_fetch_site == "cross-site":
+        return JSONResponse({"detail": "Cross-site requests are not allowed"}, status_code=403)
+
+    if path == "/api/simulate" and request.method == "POST":
+        ctype = request.headers.get("content-type", "").lower()
+        if not ctype.startswith("application/json"):
+            return JSONResponse({"detail": "Unsupported content type"}, status_code=415)
+        origin_host = _origin_host(request.headers.get("origin"))
+        referer_host = _origin_host(request.headers.get("referer"))
+        caller_host = origin_host or referer_host
+        if not caller_host or caller_host not in ALLOWED_HOSTS:
+            return JSONResponse({"detail": "Forbidden origin"}, status_code=403)
+
+    if path.startswith("/api/"):
+        tier = _rate_tier(path, request.method)
+        if not _check_rate_limit(_client_ip(request), tier):
+            return JSONResponse(
+                {"detail": "Too many requests. Please slow down."},
+                status_code=429,
+                headers={"Retry-After": "60"},
+            )
+
+    return await call_next(request)
 
 
 PROFILE_FIELDS = [
@@ -76,15 +178,21 @@ PROFILE_FIELDS = [
 
 
 class HypotheticalValuation(BaseModel):
-    value_eur: float = Field(..., gt=0)
+    value_eur: float = Field(..., gt=0, le=1_000_000_000)
     years_after: float = Field(0.5, gt=0, le=2)
+
+    @model_validator(mode="after")
+    def _finite(self) -> "HypotheticalValuation":
+        if not (math.isfinite(self.value_eur) and math.isfinite(self.years_after)):
+            raise ValueError("Non-finite float value")
+        return self
 
 
 class Scenario(BaseModel):
     """What-if changes for a real player. Applied to raw inputs, then features are recomputed."""
 
     horizon_years: float | None = Field(None, gt=0, le=MAX_HORIZON_YR)
-    league_name: str | None = None
+    league_name: str | None = Field(None, max_length=80)
     append_valuations: list[HypotheticalValuation] = Field(default_factory=list, max_length=6)
     backtest: bool = False
 
@@ -96,25 +204,37 @@ class SimulateRequest(BaseModel):
     player_id None -> synthetic profile; the ten profile fields below are required.
     """
 
-    player_id: str | None = None
+    player_id: str | None = Field(None, max_length=64)
     scenario: Scenario | None = None
     explain: bool = False  # player mode: add a per-player explanation of the 12-month outlook
 
     age: float | None = Field(None, ge=14, le=45)
     age_at_peak: float | None = Field(None, ge=14, le=45)
-    peak_value_eur: float | None = Field(None, ge=0)
-    first_value_eur: float | None = Field(None, ge=0)
-    career_span_years: float | None = Field(None, ge=0)
-    years_to_peak: float | None = Field(None, ge=0)
-    value_volatility: float | None = Field(None, ge=0)
-    num_valuation_points: int | None = Field(None, ge=1)
-    num_clubs_career: int | None = Field(None, ge=1)  # accepted for compatibility, not modelled
-    league_name: str | None = None
-    nationality: str | None = None
-    position_group: str | None = None
+    peak_value_eur: float | None = Field(None, ge=0, le=1_000_000_000)
+    first_value_eur: float | None = Field(None, ge=0, le=1_000_000_000)
+    career_span_years: float | None = Field(None, ge=0, le=35)
+    years_to_peak: float | None = Field(None, ge=0, le=35)
+    value_volatility: float | None = Field(None, ge=0, le=1000)
+    num_valuation_points: int | None = Field(None, ge=1, le=500)
+    num_clubs_career: int | None = Field(None, ge=1, le=50)  # accepted for compatibility, not modelled
+    league_name: str | None = Field(None, max_length=80)
+    nationality: str | None = Field(None, max_length=80)
+    position_group: str | None = Field(None, max_length=40)
 
     @model_validator(mode="after")
     def _profile_fields_required(self) -> "SimulateRequest":
+        for name in (
+            "age",
+            "age_at_peak",
+            "peak_value_eur",
+            "first_value_eur",
+            "career_span_years",
+            "years_to_peak",
+            "value_volatility",
+        ):
+            val = getattr(self, name)
+            if val is not None and not math.isfinite(val):
+                raise ValueError(f"{name} must be finite")
         if self.player_id is None:
             missing = [f for f in PROFILE_FIELDS if getattr(self, f) is None]
             if missing:
@@ -132,7 +252,7 @@ _SIM_CACHE: "OrderedDict[tuple, dict[str, Any]]" = OrderedDict()
 _SIM_CACHE_MAX = 1024
 _SIM_LOCK = threading.Lock()
 _SIM_SLOTS = threading.BoundedSemaphore(2)
-CACHE_HEADERS = {"Cache-Control": "public, max-age=300"}
+CACHE_HEADERS = {"Cache-Control": "public, max-age=300, stale-while-revalidate=600", "Vary": "Accept-Encoding"}
 BASELINE_FIELDS = (
     "predicted_trajectory",
     "trajectory_probabilities",
@@ -145,11 +265,22 @@ BASELINE_FIELDS = (
 )
 
 
+def _round_floats(obj: Any) -> Any:
+    if isinstance(obj, float):
+        return round(obj, 4) if math.isfinite(obj) else None
+    if isinstance(obj, list):
+        return [_round_floats(v) for v in obj]
+    if isinstance(obj, dict):
+        return {k: _round_floats(v) for k, v in obj.items()}
+    return obj
+
+
 def _static_json(key: str, build: Callable[[], Any]) -> Response:
     art = _get_artifacts()
     cache_key = (id(art), key)
     if cache_key not in _STATIC_JSON:
-        _STATIC_JSON[cache_key] = json.dumps(jsonable_encoder(build()), separators=(",", ":")).encode()
+        payload = _round_floats(jsonable_encoder(build()))
+        _STATIC_JSON[cache_key] = json.dumps(payload, separators=(",", ":")).encode()
     return Response(content=_STATIC_JSON[cache_key], media_type="application/json", headers=CACHE_HEADERS)
 
 
@@ -202,9 +333,9 @@ def test_predictions() -> Response:
 
 @app.get("/api/history")
 def history(
-    q: str = Query(default="", description="Search player name, club, or nationality"),
-    league: str = Query(default="", description="Filter by league_name"),
-    limit: int = Query(default=30, ge=1, le=3000),
+    q: str = Query(default="", max_length=80, description="Search player name, club, or nationality"),
+    league: str = Query(default="", max_length=80, description="Filter by league_name"),
+    limit: int = Query(default=30, ge=1, le=2500),
 ) -> dict[str, Any]:
     art = _get_artifacts()
     df = art.players_df
@@ -418,8 +549,13 @@ def simulate(req: SimulateRequest) -> dict[str, Any]:
         if hit is not None:
             _SIM_CACHE.move_to_end(key)
             return hit
-    with _SIM_SLOTS, threadpool_limits(limits=1):
-        out = _simulate_player(art, req) if req.player_id is not None else _simulate_profile(art, req)
+    if not _SIM_SLOTS.acquire(timeout=2.0):
+        raise HTTPException(status_code=503, detail="Simulator sedang sibuk, silakan coba lagi.")
+    try:
+        with threadpool_limits(limits=1):
+            out = _simulate_player(art, req) if req.player_id is not None else _simulate_profile(art, req)
+    finally:
+        _SIM_SLOTS.release()
     with _SIM_LOCK:
         _SIM_CACHE[key] = out
         while len(_SIM_CACHE) > _SIM_CACHE_MAX:
@@ -645,6 +781,8 @@ def _build_datasets() -> dict[str, Any]:
 
 @app.get("/api/datasets/download/{filename}")
 def download_dataset(filename: str) -> Response:
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
     if filename in EXTRA_DOWNLOADS:
         meta = EXTRA_DOWNLOADS[filename]
         if filename == "model_artifacts.joblib":

@@ -17,6 +17,7 @@ import {
   PanelSkeleton,
   PlayerCell,
   SectionHeader,
+  Select,
 } from "@/components/ui";
 import { useApi, type DatasetPlayerRow, type DatasetsResponse } from "@/lib/api";
 import { fmt } from "@/lib/format";
@@ -281,22 +282,23 @@ export function DatasetPanel() {
                 className="w-full sm:w-60 min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-[13px] text-ink placeholder:text-muted focus-visible:outline-2 focus-visible:outline-accent"
                 aria-label="Cari nama, klub, atau negara"
               />
-              <select
+              <Select
                 value={league}
-                onChange={(e) => {
-                  setLeague(e.target.value);
+                onChange={(val) => {
+                  setLeague(val);
                   setPage(0);
                 }}
-                className="min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-[13px] text-ink focus-visible:outline-2 focus-visible:outline-accent"
-                aria-label="Filter berdasarkan liga"
-              >
-                <option value="ALL">Semua Liga</option>
-                <option value="Premier League">Premier League</option>
-                <option value="La Liga">La Liga</option>
-                <option value="Serie A">Serie A</option>
-                <option value="Bundesliga">Bundesliga</option>
-                <option value="Ligue 1">Ligue 1</option>
-              </select>
+                ariaLabel="Filter berdasarkan liga"
+                align="right"
+                options={[
+                  { value: "ALL", label: "Semua Liga" },
+                  { value: "Premier League", label: "Premier League" },
+                  { value: "La Liga", label: "La Liga" },
+                  { value: "Serie A", label: "Serie A" },
+                  { value: "Bundesliga", label: "Bundesliga" },
+                  { value: "Ligue 1", label: "Ligue 1" },
+                ]}
+              />
             </div>
           }
         />

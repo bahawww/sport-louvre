@@ -195,7 +195,13 @@ function HistoryChart({ sim, model }: { sim: SimulateResponse; model: ModelId })
               fill="var(--raised)"
             />
             <path d={path(hidden)} fill="none" stroke="var(--muted)" strokeWidth="1.5" strokeDasharray="3 4" />
-            <text x={x(last.t) - 6} y={height - pad.b - 8} textAnchor="end" fontSize="11" fill="var(--muted)">
+            <text
+              x={x(last.t) - 6}
+              y={y(last.v) > pad.t + 38 || (target.v < from.v && y(target.lo) > height - pad.b - 36) ? pad.t + 14 : height - pad.b - 8}
+              textAnchor="end"
+              fontSize="11"
+              fill="var(--muted)"
+            >
               12 bulan terakhir disembunyikan
             </text>
           </>

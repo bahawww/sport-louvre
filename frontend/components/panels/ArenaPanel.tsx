@@ -15,6 +15,7 @@ import {
   Meter,
   Disclosure,
 } from "@/components/ui";
+import { PitchBanner } from "@/components/PitchBanner";
 
 const MODEL_NAME: Record<string, { name: string; note: string }> = {
   "Ordinal HGB (calibrated)": { name: "Gradient boosting berurutan", note: "memperlakukan empat tren sebagai tangga, dari naik sampai jatuh" },
@@ -301,6 +302,8 @@ export function ArenaPanel({
         title="Seberapa bagus modelnya"
         subtitle={`Model di situs ini menebak tiga hal tentang nilai pasar pemain. Tiap tebakan diuji pada ${fmt.int(ds.test_size)} pemain yang tidak pernah dilihat model, lalu dibandingkan dengan tebakan paling sederhana: menganggap tidak ada yang berubah. Model baru berguna kalau mengalahkan tebakan sederhana itu.`}
       />
+
+      <PitchBanner />
 
       <Panel padding="none">
         <PanelDividerGrid cols={3}>

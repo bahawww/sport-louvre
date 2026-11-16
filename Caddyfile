@@ -1,6 +1,15 @@
 {
 	auto_https off
 	admin off
+	servers {
+		timeouts {
+			read_body 5s
+			read_header 5s
+			write 30s
+			idle 60s
+		}
+		max_header_size 16KB
+	}
 }
 
 :8310 {
@@ -9,8 +18,13 @@
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
 		X-Frame-Options DENY
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 		-Server
 	}
+
+	# Next.js hashed bundles are immutable; let Cloudflare & browsers cache them long-term.
+	@next_static path /_next/static/*
+	header @next_static >Cache-Control "public, max-age=31536000, immutable"
 
 	# Portraits and crests keep their file name when replaced, so cache for a day, not forever.
 	@media path /media/*
@@ -21,9 +35,15 @@
 	header @downloads >Cache-Control "no-store"
 
 	handle /api/* {
+		request_body {
+			max_size 32KB
+		}
 		reverse_proxy api:8000
 	}
 	handle {
+		request_body {
+			max_size 16KB
+		}
 		reverse_proxy web:3000
 	}
 }

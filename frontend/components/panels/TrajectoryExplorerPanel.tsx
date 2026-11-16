@@ -20,6 +20,7 @@ import {
   SectionHeader,
   Skeleton,
   Stat,
+  Select,
 } from "@/components/ui";
 import { useApi, type HistoryResponse, type PlayerHistoryItem } from "@/lib/api";
 import { fmt } from "@/lib/format";
@@ -71,7 +72,7 @@ export function TrajectoryExplorerPanel() {
           return `<strong>${pt.date}</strong><br/>Valuasi: ${fmt.eur(pt.value_eur)}<br/>Klub: ${pt.club} (Usia ${pt.age_at_date})`;
         },
       },
-      grid: { left: 56, right: 16, top: 24, bottom: 28 },
+      grid: { left: 8, right: 16, top: 16, bottom: 8, containLabel: true },
       xAxis: {
         type: "category",
         data: pts.map((p) => p.date),
@@ -108,8 +109,8 @@ export function TrajectoryExplorerPanel() {
           name: "Nilai Pasar (€)",
           type: "line",
           symbol: "circle",
-          symbolSize: 6,
-          showSymbol: pts.length <= 20,
+          symbolSize: pts.length > 35 ? 5 : 6,
+          showSymbol: true,
           lineStyle: { width: 2, color: theme.chart1 },
           itemStyle: { color: theme.chart1 },
           areaStyle: { color: theme.chart1, opacity: 0.08 },
@@ -138,19 +139,16 @@ export function TrajectoryExplorerPanel() {
               aria-label="Cari nama pemain atau klub"
               className="w-full min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-[13px] text-ink placeholder:text-faint focus:outline-none focus:ring-1 focus:ring-accent"
             />
-            <select
+            <Select
               value={league}
-              onChange={(e) => setLeague(e.target.value)}
-              aria-label="Filter liga"
-              className="w-full min-h-[44px] lg:min-h-[36px] rounded-control border border-control bg-raised px-3 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-accent"
-            >
-              <option value="">Semua 5 Liga Top</option>
-              {LEAGUES.filter(Boolean).map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
-              ))}
-            </select>
+              onChange={setLeague}
+              ariaLabel="Filter liga"
+              className="w-full"
+              options={[
+                { value: "", label: "Semua 5 Liga Top" },
+                ...LEAGUES.filter(Boolean).map((l) => ({ value: l, label: l })),
+              ]}
+            />
           </div>
 
           <div className="mt-3">

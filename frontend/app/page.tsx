@@ -2,7 +2,7 @@
 
 import { PanelSkeleton } from "@/components/ui";
 import dynamic from "next/dynamic";
-import { type ComponentType, useEffect, useState } from "react";
+import { type ComponentType, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 
 import {
@@ -12,27 +12,30 @@ import {
 } from "@/lib/api";
 
 const loading = () => <PanelSkeleton />;
+const quietLoading = () => null;
 
 type PanelProps = { overview: OverviewResponse; preds: TestPredictionsResponse };
 
-const ArenaPanel = dynamic(() => import("@/components/panels/ArenaPanel").then((m) => m.ArenaPanel), { loading });
-const DiagnosticsPanel = dynamic(() => import("@/components/panels/DiagnosticsPanel").then((m) => m.DiagnosticsPanel), { loading });
-const ErrorAnalysisPanel = dynamic(() => import("@/components/panels/ErrorAnalysisPanel").then((m) => m.ErrorAnalysisPanel), { loading });
-const TrajectoryExplorerPanel = dynamic(() => import("@/components/panels/TrajectoryExplorerPanel").then((m) => m.TrajectoryExplorerPanel), { loading });
-const ScoutingSimulatorPanel = dynamic(() => import("@/components/panels/ScoutingSimulatorPanel").then((m) => m.ScoutingSimulatorPanel), { loading });
-const RecommendationsPanel = dynamic(() => import("@/components/panels/RecommendationsPanel").then((m) => m.RecommendationsPanel), { loading });
-const DatasetPanel = dynamic(() => import("@/components/panels/DatasetPanel").then((m) => m.DatasetPanel), { loading });
-const PenjelasanPanel = dynamic(() => import("@/components/panels/PenjelasanPanel").then((m) => m.PenjelasanPanel), { loading });
+const LOADERS = {
+  arena: () => import("@/components/panels/ArenaPanel").then((m) => m.ArenaPanel),
+  diagnostics: () => import("@/components/panels/DiagnosticsPanel").then((m) => m.DiagnosticsPanel),
+  errors: () => import("@/components/panels/ErrorAnalysisPanel").then((m) => m.ErrorAnalysisPanel),
+  history: () => import("@/components/panels/TrajectoryExplorerPanel").then((m) => m.TrajectoryExplorerPanel),
+  simulator: () => import("@/components/panels/ScoutingSimulatorPanel").then((m) => m.ScoutingSimulatorPanel),
+  recommendations: () => import("@/components/panels/RecommendationsPanel").then((m) => m.RecommendationsPanel),
+  datasets: () => import("@/components/panels/DatasetPanel").then((m) => m.DatasetPanel),
+  penjelasan: () => import("@/components/panels/PenjelasanPanel").then((m) => m.PenjelasanPanel),
+} as const;
 
 const PANELS: Record<TabId, ComponentType<PanelProps>> = {
-  arena: ArenaPanel as ComponentType<PanelProps>,
-  diagnostics: DiagnosticsPanel as ComponentType<PanelProps>,
-  errors: ErrorAnalysisPanel as ComponentType<PanelProps>,
-  history: TrajectoryExplorerPanel as ComponentType<PanelProps>,
-  simulator: ScoutingSimulatorPanel as ComponentType<PanelProps>,
-  recommendations: RecommendationsPanel as ComponentType<PanelProps>,
-  datasets: DatasetPanel as ComponentType<PanelProps>,
-  penjelasan: PenjelasanPanel as ComponentType<PanelProps>,
+  arena: dynamic(LOADERS.arena, { loading: quietLoading }) as ComponentType<PanelProps>,
+  diagnostics: dynamic(LOADERS.diagnostics, { loading: quietLoading }) as ComponentType<PanelProps>,
+  errors: dynamic(LOADERS.errors, { loading: quietLoading }) as ComponentType<PanelProps>,
+  history: dynamic(LOADERS.history, { loading: quietLoading }) as ComponentType<PanelProps>,
+  simulator: dynamic(LOADERS.simulator, { loading: quietLoading }) as ComponentType<PanelProps>,
+  recommendations: dynamic(LOADERS.recommendations, { loading: quietLoading }) as ComponentType<PanelProps>,
+  datasets: dynamic(LOADERS.datasets, { loading: quietLoading }) as ComponentType<PanelProps>,
+  penjelasan: dynamic(LOADERS.penjelasan, { loading: quietLoading }) as ComponentType<PanelProps>,
 };
 
 const TABS = [
@@ -55,24 +58,55 @@ function readTab(): TabId {
 
 export default function DashboardPage() {
   const [tab, setTab] = useState<TabId | null>(null);
-  const [open, setOpen] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
+  const [pill, setPill] = useState<{ left: number; top: number; width: number; height: number; on: boolean }>({
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
+    on: false,
+  });
   const { resolvedTheme, setTheme } = useTheme();
 
   useEffect(() => {
     setTab(readTab());
     const onPop = () => setTab(readTab());
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     addEventListener("popstate", onPop);
-    addEventListener("keydown", onKey);
     return () => {
       removeEventListener("popstate", onPop);
-      removeEventListener("keydown", onKey);
     };
   }, []);
 
+  useLayoutEffect(() => {
+    const sync = () => {
+      const nav = navRef.current;
+      const active = nav?.querySelector<HTMLButtonElement>('[aria-current="page"]');
+      if (!active) {
+        setPill((p) => (p.on ? { ...p, on: false } : p));
+        return;
+      }
+      setPill({
+        left: active.offsetLeft,
+        top: active.offsetTop,
+        width: active.offsetWidth,
+        height: active.offsetHeight,
+        on: true,
+      });
+      if (nav && nav.scrollWidth > nav.clientWidth) {
+        const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        nav.scrollTo({
+          left: Math.max(0, active.offsetLeft - (nav.clientWidth - active.offsetWidth) / 2),
+          behavior: reduce ? "auto" : "smooth",
+        });
+      }
+    };
+    sync();
+    addEventListener("resize", sync);
+    return () => removeEventListener("resize", sync);
+  }, [tab]);
+
   const selectTab = (id: TabId) => {
     setTab(id);
-    setOpen(false);
     history.pushState(null, "", id === "arena" ? location.pathname : `?tab=${id}`);
   };
 
@@ -84,24 +118,12 @@ export default function DashboardPage() {
   const overview = useApi<OverviewResponse>("/overview");
   const preds = useApi<TestPredictionsResponse>("/test-predictions");
   const ActivePanel = PANELS[tab ?? "arena"];
-  const metaText = overview.data
-    ? `${overview.data.dataset.total_players.toLocaleString("id-ID")} pemain · ${overview.data.dataset.leagues.length} liga eropa`
-    : null;
 
   return (
     <div className="sh-root">
       <header className="sh-top">
         <div className="sh-top-in">
           <div className="sh-brand">
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className="sh-ibtn sh-hide-lg"
-              aria-label="Buka menu navigasi"
-              aria-expanded={open}
-            >
-              Menu
-            </button>
             <svg className="sh-mark" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <rect x="2.5" y="4.5" width="19" height="15" rx="2" stroke="currentColor" strokeWidth="1.7" />
               <path d="M12 4.5v15M2.5 8.5h3.2v7H2.5M21.5 8.5h-3.2v7h3.2" stroke="currentColor" strokeWidth="1.5" />
@@ -112,11 +134,23 @@ export default function DashboardPage() {
             <span className="sh-sub sh-only-lg">Football player market value analysis</span>
           </div>
 
-          <nav aria-label="Navigasi utama" className="sh-nav-top">
+          <nav ref={navRef} aria-label="Navigasi utama" className="sh-nav-top">
+            <span
+              className="sh-pill"
+              aria-hidden="true"
+              style={{
+                width: pill.width,
+                height: pill.height,
+                transform: `translate(${pill.left}px, ${pill.top}px)`,
+                opacity: pill.on ? 1 : 0,
+              }}
+            />
             {TABS.map(([id, label]) => (
               <button
                 key={id}
                 type="button"
+                onMouseEnter={() => void LOADERS[id]()}
+                onFocus={() => void LOADERS[id]()}
                 onClick={() => selectTab(id)}
                 aria-current={tab === id ? "page" : undefined}
                 className={tab === id ? "sh-tab on" : "sh-tab"}
@@ -127,50 +161,12 @@ export default function DashboardPage() {
           </nav>
 
           <div className="sh-right">
-            {metaText && <span className="sh-sub sh-meta">{metaText}</span>}
             <button type="button" onClick={toggleTheme} className="sh-ibtn" aria-label="Ganti tema">
               {themeReady ? (isDark ? "Terang" : "Gelap") : "Tema"}
             </button>
           </div>
         </div>
       </header>
-
-      {open && (
-        <>
-          <div className="sh-back" onClick={() => setOpen(false)} aria-hidden="true" />
-          <aside aria-label="Menu navigasi" className="sh-aside open">
-            <div className="sh-head">
-              <div>
-                <b className="sh-title">Sport Louvre</b>
-                <p className="sh-sub">Transfermarkt 2025/2026</p>
-              </div>
-              <button type="button" onClick={() => setOpen(false)} className="sh-ibtn" aria-label="Tutup menu">
-                Tutup
-              </button>
-            </div>
-
-            <nav aria-label="Navigasi mobile" className="sh-nav">
-              {TABS.map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => selectTab(id)}
-                  aria-current={tab === id ? "page" : undefined}
-                  className={tab === id ? "sh-tab on" : "sh-tab"}
-                >
-                  {label}
-                </button>
-              ))}
-            </nav>
-
-            {metaText && (
-              <div className="sh-foot">
-                <p className="sh-sub">{metaText}</p>
-              </div>
-            )}
-          </aside>
-        </>
-      )}
 
       <main className="sh-main">
         {!tab || overview.isLoading || preds.isLoading ? (
@@ -190,7 +186,9 @@ export default function DashboardPage() {
             </button>
           </div>
         ) : (
-          <ActivePanel overview={overview.data} preds={preds.data} />
+          <div key={tab} className="sp-view">
+            <ActivePanel overview={overview.data} preds={preds.data} />
+          </div>
         )}
       </main>
     </div>
