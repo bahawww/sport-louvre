@@ -16,7 +16,7 @@ import {
   Segmented,
 } from "@/components/ui";
 import type { OverviewResponse, TestPredictionRow, TestPredictionsResponse } from "@/lib/api";
-import { fmt, trajectoryLabel, TREND_META } from "@/lib/format";
+import { fmt, toTrendModel, trajectoryLabel, TREND_META } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 function TrendBadge({
@@ -48,15 +48,9 @@ interface ValidationRow {
   accuracyTrend: string;
   baseline: string;
   macroF1: string;
-  detail5Class: string;
   forecastR2: string;
   fundamentalR2: string;
 }
-
-const VIEW_OPTIONS = [
-  { value: "trend", label: "4 Kelas" },
-  { value: "detail", label: "5 Kelas" },
-] as const;
 
 const MODE_OPTIONS = [
   { value: "clean", label: "Clean" },
@@ -105,17 +99,18 @@ export function DiagnosticsPanel({
   const cvTrendBase = trendCv?.["Persistence (last state)"];
 
   const trend = overview.classification.trend;
-  const [view, setView] = useState<"trend" | "detail">(trend ? "trend" : "detail");
-  const showTrend = mode === "clean" && view === "trend" && !!trend;
-  const clsModels = showTrend
-    ? trend.models
-    : mode === "clean"
-      ? overview.classification.clean_mode.models
-      : overview.classification.leakage_mode.models;
+  // Everything on this tab is shown in the 4 trend classes; 5-class results are folded.
+  const clsModels = useMemo(
+    () =>
+      mode === "clean"
+        ? (trend?.models ?? overview.classification.clean_mode.models.map(toTrendModel))
+        : overview.classification.leakage_mode.models.map(toTrendModel),
+    [mode, trend, overview],
+  );
   const safeModelIdx = modelIdx < clsModels.length ? modelIdx : 0;
   const activeCls = clsModels[safeModelIdx] ?? clsModels[0];
-  const classes: string[] = showTrend ? trend.classes : overview.classification.classes;
-  const classLabel = (c: string) => (showTrend ? (TREND_META[c]?.label ?? c) : trajectoryLabel(c));
+  const classes: string[] = trend?.classes ?? ["rising", "stable", "declining", "falling_sharply"];
+  const classLabel = (c: string) => TREND_META[c]?.label ?? c;
   const baselineCls = clsModels.find((m) => m.name.startsWith("Persistence"));
   const PERSIST = "Persistence (last state)";
   const ootTrend = (name: string) =>
@@ -225,7 +220,6 @@ export function DiagnosticsPanel({
         accuracyTrend: trend ? fmt.pct(trend.headline.metrics.accuracy) : "-",
         baseline: trend ? fmt.pct(trend.headline.persistence.accuracy) : "-",
         macroF1: trend ? fmt.pct(trend.headline.metrics.macro_f1) : "-",
-        detail5Class: fmt.pct(holdoutClf.accuracy),
         forecastR2:
           tasks.forecast.models.find((m) => m.name === tasks.forecast.best_model)?.r2_log?.toFixed(3) ??
           "-",
@@ -243,7 +237,6 @@ export function DiagnosticsPanel({
           : "-",
         baseline: cvTrendBase ? fmt.pct(cvTrendBase.accuracy_mean) : "-",
         macroF1: cvTrend ? fmt.pct(cvTrend.macro_f1_mean) : "-",
-        detail5Class: fmt.pct(cvClf.accuracy_mean),
         forecastR2:
           tasks.forecast.validation.group_kfold[tasks.forecast.best_model]?.r2_log_mean.toFixed(3) ?? "-",
         fundamentalR2:
@@ -259,7 +252,6 @@ export function DiagnosticsPanel({
         accuracyTrend: bestOotTrend ? fmt.pct(bestOotTrend.accuracy) : "-",
         baseline: persistOotTrend ? fmt.pct(persistOotTrend.accuracy) : "-",
         macroF1: bestOotTrend ? fmt.pct(bestOotTrend.macro_f1) : "-",
-        detail5Class: fmt.pct(ootClf.accuracy),
         forecastR2: oot.regression.forecast[tasks.forecast.best_model]?.r2_log.toFixed(3) ?? "-",
         fundamentalR2: oot.regression.fundamental[tasks.fundamental.best_model]?.r2_log.toFixed(3) ?? "-",
       });
@@ -293,12 +285,6 @@ export function DiagnosticsPanel({
         header: "Macro-F1",
         align: "right",
         cell: (r) => <span className="text-ink">{r.macroF1}</span>,
-      },
-      {
-        key: "detail5Class",
-        header: "Rincian 5 kelas",
-        align: "right",
-        cell: (r) => <span className="text-muted">{r.detail5Class}</span>,
       },
       {
         key: "forecastR2",
@@ -419,14 +405,6 @@ export function DiagnosticsPanel({
               title="Interactive Confusion Matrix"
               actions={
                 <div className="flex flex-wrap items-center gap-2">
-                  {trend && mode === "clean" ? (
-                    <Segmented
-                      options={VIEW_OPTIONS}
-                      value={view}
-                      onChange={setView}
-                      ariaLabel="Pilih jumlah kelas klasifikasi"
-                    />
-                  ) : null}
                   <Segmented
                     options={MODE_OPTIONS}
                     value={mode}

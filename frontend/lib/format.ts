@@ -56,3 +56,24 @@ export const TREND_META: Record<string, { label: string; hint: string; className
     className: "pill-crimson",
   },
 };
+
+/** Fold a 5-class result into the 4 trend classes (rising_star + growing become one). */
+export function toTrendModel<T extends { confusion_matrix: number[][]; accuracy: number; macro_f1?: number }>(m: T): T {
+  const group = [0, 0, 1, 2, 3];
+  const cm = Array.from({ length: 4 }, () => [0, 0, 0, 0]);
+  m.confusion_matrix.forEach((row, i) => row.forEach((n, j) => (cm[group[i]][group[j]] += n)));
+  const total = cm.flat().reduce((a, b) => a + b, 0);
+  const f1 = cm.map((row, k) => {
+    const tp = row[k];
+    const actual = row.reduce((a, b) => a + b, 0);
+    const predicted = cm.reduce((a, r) => a + r[k], 0);
+    return actual + predicted ? (2 * tp) / (actual + predicted) : 0;
+  });
+  return {
+    ...m,
+    confusion_matrix: cm,
+    accuracy: total ? cm.reduce((a, row, k) => a + row[k], 0) / total : 0,
+    macro_f1: f1.reduce((a, b) => a + b, 0) / 4,
+    ece: undefined,
+  };
+}

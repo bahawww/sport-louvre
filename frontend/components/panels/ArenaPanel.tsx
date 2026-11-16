@@ -1,7 +1,7 @@
 "use client";
 
 import type { OverviewResponse, TestPredictionsResponse } from "@/lib/api";
-import { fmt, TREND_META } from "@/lib/format";
+import { fmt, toTrendModel, TREND_META } from "@/lib/format";
 import {
   PageHeader,
   SectionHeader,
@@ -176,7 +176,10 @@ export function ArenaPanel({
   const fc = tasks?.forecast.headline;
   const ov = preds.outlook?.validation;
   const cleanBest = cls.clean_mode.models.find((m) => m.name === cls.clean_mode.best_model) ?? cls.clean_mode.models[0];
-  const leakBest = cls.leakage_mode.models.find((m) => m.name === cls.leakage_mode.best_model) ?? cls.leakage_mode.models[0];
+  const leakBest = toTrendModel(
+    cls.leakage_mode.models.find((m) => m.name === cls.leakage_mode.best_model) ?? cls.leakage_mode.models[0],
+  );
+  const honestAcc = trend?.headline.metrics.accuracy ?? toTrendModel(cleanBest).accuracy;
 
   const cards = [
     trend && {
@@ -352,7 +355,7 @@ export function ArenaPanel({
             />
             <div className="mt-5 grid grid-cols-2 gap-5">
               <Waffle
-                value={cleanBest.accuracy}
+                value={honestAcc}
                 tone="accent"
                 title="Model jujur"
                 note="hanya melihat riwayat harga sebelum tebakan"
@@ -366,8 +369,8 @@ export function ArenaPanel({
             </div>
           </div>
           <p className="mt-4 text-[13px] leading-relaxed text-muted">
-            Tiap kotak satu dari 100 pemain uji; kotak berwarna berarti trennya tertebak benar (lima kelas asli dataset).
-            Selisih {(preds.error_analysis.leakage_delta_acc * 100).toFixed(1).replace(".", ",")} poin itu murni dari bocoran.
+            Tiap kotak satu dari 100 pemain uji; kotak berwarna berarti trennya tertebak benar.
+            Selisih {((leakBest.accuracy - honestAcc) * 100).toFixed(1).replace(".", ",")} poin itu murni dari bocoran.
             Semua angka di situs ini memakai model jujur. Rinciannya ada di tab Penjelasan &amp; Workflow.
           </p>
         </Panel>

@@ -20,7 +20,7 @@ import {
   type OverviewResponse,
   type SimulateResponse,
 } from "@/lib/api";
-import { fmt, TREND_META } from "@/lib/format";
+import { fmt, toTrendModel, TREND_META } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { WorkflowRoadmap } from "./WorkflowRoadmap";
@@ -365,8 +365,7 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
         <>
           Benar {pct1(trend.headline.metrics.accuracy)} lawan {pct1(trend.headline.persistence.accuracy)} untuk tebakan
           &quot;pita tidak berubah&quot;.{" "}
-          <Verdict good>Unggul {trend.headline.gain_vs_persistence.accuracy_pp.toFixed(1).replace(".", ",")} poin.</Verdict> Dengan 5
-          kelas asli dataset: {pct1(cleanBest.accuracy)}.
+          <Verdict good>Unggul {trend.headline.gain_vs_persistence.accuracy_pp.toFixed(1).replace(".", ",")} poin.</Verdict>
         </>
       ) : null,
       features: cleanBest.feature_importance,
@@ -490,33 +489,30 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
     },
   ];
 
-  const prev = leak?.previous_pipeline?.reported_clean_classifier.accuracy;
-  const prevSim = leak?.previous_pipeline?.simulate_endpoint_classifier.accuracy;
-  const leakRows: LeakRow[] = leak
-    ? [
-        ...(prev ? [{ name: "Pipeline lama", note: "memakai kolom ringkasan CSV", value: prev, bad: true }] : []),
-        ...(prevSim
-          ? [{ name: "Simulator lama", note: "fiturnya ditebak dari form, tidak sama dengan saat melatih", value: prevSim, bad: true }]
-          : []),
-        {
-          name: "Uji ulang tanpa 4 kolom itu",
-          note: "model pembanding, hanya riwayat sebelum target",
-          value: leak.contamination_test.without_csv_columns.accuracy,
-          bad: false,
-        },
-        {
-          name: "Uji ulang dengan 4 kolom itu",
-          note: "model yang sama, kolom bocor ditambahkan",
-          value: leak.contamination_test.with_csv_columns.accuracy,
-          bad: true,
-        },
-      ]
-    : [];
+  const leakModels = overview.classification.leakage_mode;
+  const leakBest = leakModels.models.find((m) => m.name === leakModels.best_model) ?? leakModels.models[0];
+  const leakRows: LeakRow[] =
+    trend && leakBest
+      ? [
+          {
+            name: "Model sekarang",
+            note: "hanya riwayat sebelum harga target",
+            value: trend.headline.metrics.accuracy,
+            bad: false,
+          },
+          {
+            name: "Model yang diberi kolom ringkasan CSV",
+            note: "kolomnya dihitung dari seluruh riwayat, termasuk jawabannya",
+            value: toTrendModel(leakBest).accuracy,
+            bad: true,
+          },
+        ]
+      : [];
 
   const leakColumns: DataTableColumn<LeakRow>[] = [
     {
       key: "name",
-      header: "Akurasi 5 kelas",
+      header: "Akurasi tebakan tren",
       align: "left",
       cell: (r) => (
         <div className="py-1">
@@ -730,7 +726,7 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
         <Panel as="section" padding="md">
           <SectionHeader
             as="h2"
-            title="Kenapa akurasi lama 85% tidak dipakai"
+            title="Kenapa kolom ringkasan CSV tidak dipakai"
             subtitle={
               <>
                 Kolom ringkasan di CSV seperti <code className="text-ink font-mono text-xs">peak_value_eur</code> dihitung dari seluruh riwayat, termasuk harga yang sedang ditebak.
@@ -752,8 +748,8 @@ export function PenjelasanPanel({ overview }: { overview: OverviewResponse }) {
           />
           {leak ? (
             <p className="mt-3 text-xs leading-relaxed text-muted">
-              Kuning berarti angkanya tidak bisa dipercaya: terbantu bocoran, atau fiturnya tidak sama dengan saat melatih. Empat
-              kolom yang diuji: {leak.contamination_test.columns_added.join(", ")}.
+              Kuning berarti angkanya tidak bisa dipercaya karena terbantu bocoran. Angka sempurna itu hilang begitu model
+              dipakai untuk pemain yang harganya belum keluar.
             </p>
           ) : null}
         </Panel>
